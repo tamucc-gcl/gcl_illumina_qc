@@ -20,10 +20,10 @@ workflow {
     .set { genome_info }
 
   fastp_trim_3(read_pairs)
-    | clumpify()
-    | fastp_trim_5()
-    | fastq_screen()
-    | repair()
+    | clumpify
+    | fastp_trim_5
+    | fastq_screen
+    | repair
     | map_reads(genome_info)
 
   fastp_trim_3.out.collect().set { fastp3_out }
