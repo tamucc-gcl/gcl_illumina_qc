@@ -3,7 +3,7 @@
 nextflow.enable.dsl=2
 
 params.reads = "data/*_{1,2}.fq.gz"
-params.accession = "GCF_002234675.1"
+params.accession = "GCA_042920385.1"
 params.outdir = "results"
 params.multiqc_dir = "results/multiqc"
 
@@ -16,8 +16,7 @@ workflow {
   multiqc(raw_reads, "raw", params.multiqc_dir)
 
   // Download and prepare genome
-  fetch_genome(params.accession)
-    | index_genome
+  prepare_genome(params.accession)
     .set { genome_info }
 
   fastp_trim_3(read_pairs, outdir: "data/fq_fp1")
@@ -41,6 +40,14 @@ workflow {
 
   repair.out.collect().set { repair_out }
   multiqc(repair_out, "repair", params.multiqc_dir)
+}
+
+workflow prepare_genome {
+  take: accession
+  main:
+    fetch_genome(accession) | index_genome
+  emit:
+    index_genome.out
 }
 
 include { fastp_trim_3 } from './modules/fastp_trim_3.nf'
