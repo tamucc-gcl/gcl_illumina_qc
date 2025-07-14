@@ -6,11 +6,10 @@ process clumpify {
   tuple val(sample_id), path(reads)
 
   output:
-  tuple val(sample_id), path("data/fq_fp1_clmp/*.fq.gz")
+  tuple val(sample_id), path("${sample_id}_clumped_1.fq.gz"), path("${sample_id}_clumped_2.fq.gz")
 
   script:
   """
-  mkdir -p data/fq_fp1_clmp
-  clumpify.sh in=${reads[0]} in2=${reads[1]} out=data/fq_fp1_clmp/${sample_id}_clumped_1.fq.gz out2=data/fq_fp1_clmp/${sample_id}_clumped_2.fq.gz
+  clumpify.sh in=${reads[0]} in2=${reads[1]} out=${sample_id}_clumped_1.fq.gz out2=${sample_id}_clumped_2.fq.gz
   """
 }

@@ -7,11 +7,11 @@ process map_reads {
   val genome
 
   output:
-  path("data/fq_fp1_clmp_fp2_scrn_rpr_map/${sample_id}.bam")
+  path("${sample_id}.bam")
 
   script:
   """
-  mkdir -p data/fq_fp1_clmp_fp2_scrn_rpr_map
-  bwa mem2 ${genome} ${reads[0]} ${reads[1]} | samtools view -Sb - > data/fq_fp1_clmp_fp2_scrn_rpr_map/${sample_id}.bam
+  bwa mem2 ${genome} ${reads[0]} ${reads[1]} | \
+    samtools view -Sb - > ${sample_id}.bam
   """
 }
