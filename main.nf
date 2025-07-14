@@ -19,17 +19,16 @@ workflow {
   prepare_genome(params.accession)
     .set { genome_info }
 
-  // Run the pipeline and capture the final output channel
+  // Step 1: Run the pipeline up to repair and assign to a channel
   fastp_trim_3(read_pairs)
     | clumpify
     | fastp_trim_5
     | fastq_screen
     | repair
-    .set { repaired_reads }
+    | set { repaired_reads }
 
-  // Combine with genome_info
-  repaired_reads
-    .combine(genome_info)
+  // Step 2: Combine with genome_info
+  repaired_reads.combine(genome_info)
     | map_reads
 
   fastp_trim_3.out.collect().set { fastp3_out }
