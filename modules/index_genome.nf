@@ -1,13 +1,12 @@
 process index_genome {
   label 'index_genome'
-  tag "$genome"
+  tag "$genome_path"
 
   input:
-  path genome
+  tuple path(genome), val(genome_path)
 
   output:
-  path("${genome}.*")
-  val(genome)
+  tuple path(genome), val(genome_path)
 
   script:
   """

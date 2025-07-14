@@ -6,8 +6,7 @@ process fetch_genome {
   val accession
 
   output:
-  path("genome/raw")   // All raw files here
-  path("genome/genome.fa")
+  tuple path("genome/genome.fa"), val("genome/genome.fa")
 
   script:
   """
