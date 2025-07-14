@@ -13,7 +13,7 @@ workflow {
 
   // Run MultiQC on raw data
   read_pairs.collect().set { raw_reads }
-  multiqc(raw_reads, "raw", params.multiqc_dir)
+  multiqc_raw(raw_reads, "raw", params.multiqc_dir)
 
   // Download and prepare genome
   prepare_genome(params.accession)
@@ -33,19 +33,19 @@ workflow {
   map_reads(repaired_ch, genome_ch)
 
   fastp_trim_3.out.collect().set { fastp3_out }
-  multiqc(fastp3_out, "fastp_trim_3", params.multiqc_dir)
+  multiqc_fastp3(fastp3_out, "fastp_trim_3", params.multiqc_dir)
 
   clumpify.out.collect().set { clumpify_out }
-  multiqc(clumpify_out, "clumpify", params.multiqc_dir)
+  multiqc_clumpify(clumpify_out, "clumpify", params.multiqc_dir)
 
   fastp_trim_5.out.collect().set { fastp5_out }
-  multiqc(fastp5_out, "fastp_trim_5", params.multiqc_dir)
+  multiqc_fastp5(fastp5_out, "fastp_trim_5", params.multiqc_dir)
 
   fastq_screen.out.collect().set { fastqscreen_out }
-  multiqc(fastqscreen_out, "fastq_screen", params.multiqc_dir)
+  multiqc_fastqscreen(fastqscreen_out, "fastq_screen", params.multiqc_dir)
 
   repair.out.collect().set { repair_out }
-  multiqc(repair_out, "repair", params.multiqc_dir)
+  multiqc_repair(repair_out, "repair", params.multiqc_dir)
 }
 
 workflow prepare_genome {
@@ -62,6 +62,12 @@ include { fastp_trim_5 } from './modules/fastp_trim_5.nf'
 include { fastq_screen } from './modules/fastq_screen.nf'
 include { repair } from './modules/repair.nf'
 include { map_reads } from './modules/map_reads.nf'
-include { multiqc } from './modules/multiqc.nf'
 include { fetch_genome } from './modules/fetch_genome.nf'
 include { index_genome } from './modules/index_genome.nf'
+
+include { multiqc as multiqc_raw } from './modules/multiqc.nf'
+include { multiqc as multiqc_fastp3 } from './modules/multiqc.nf'
+include { multiqc as multiqc_clumpify } from './modules/multiqc.nf'
+include { multiqc as multiqc_fastp5 } from './modules/multiqc.nf'
+include { multiqc as multiqc_fastqscreen } from './modules/multiqc.nf'
+include { multiqc as multiqc_repair } from './modules/multiqc.nf'
