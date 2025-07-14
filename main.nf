@@ -3,7 +3,7 @@
 nextflow.enable.dsl=2
 
 params.reads = "data/*_{1,2}.fq.gz"
-params.accession = "GCA_042920385.1"
+params.accession = "GCF_002234675.1"
 params.outdir = "results"
 params.multiqc_dir = "results/multiqc"
 
@@ -20,30 +20,37 @@ workflow {
     .set { genome_info }
 
   fastp_trim_3(read_pairs, outdir: "data/fq_fp1")
-    | map { it -> tuple(it[0], it[1], "data/fq_fp1_clmp") }
+    .into { trimmed_reads_for_clumpify; fastp3_out }
+
+  trimmed_reads_for_clumpify
+    .combine(Channel.value("data/fq_fp1_clmp"))
     | clumpify
-    | map { it -> tuple(it[0], it[1], "data/fq_fp1_clmp_fp5") }
+    .into { clumped_reads_for_fp5; clumpify_out }
+
+  clumped_reads_for_fp5
+    .combine(Channel.value("data/fq_fp1_clmp_fp5"))
     | fastp_trim_5
-    | map { it -> tuple(it[0], it[1], "data/fq_fp1_clmp_fp5_scrn") }
+    .into { fp5_reads_for_screen; fastp5_out }
+
+  fp5_reads_for_screen
+    .combine(Channel.value("data/fq_fp1_clmp_fp5_scrn"))
     | fastq_screen
-    | map { it -> tuple(it[0], it[1], "data/fq_fp1_clmp_fp5_scrn_rpr") }
+    .into { screened_reads_for_repair; fastqscreen_out }
+
+  screened_reads_for_repair
+    .combine(Channel.value("data/fq_fp1_clmp_fp5_scrn_rpr"))
     | repair
-    | map { it -> tuple(it[0], it[1], genome_info, "data/fq_fp1_clmp_fp5_scrn_rpr_map") }
+    .into { repaired_reads_for_mapping; repair_out }
+
+  repaired_reads_for_mapping
+    .combine(genome_info)
+    .combine(Channel.value("data/fq_fp1_clmp_fp5_scrn_rpr_map"))
     | map_reads
 
-  fastp_trim_3.out.collect().set { fastp3_out }
   multiqc(fastp3_out, "fastp_trim_3", params.multiqc_dir)
-
-  clumpify.out.collect().set { clumpify_out }
   multiqc(clumpify_out, "clumpify", params.multiqc_dir)
-
-  fastp_trim_5.out.collect().set { fastp5_out }
   multiqc(fastp5_out, "fastp_trim_5", params.multiqc_dir)
-
-  fastq_screen.out.collect().set { fastqscreen_out }
   multiqc(fastqscreen_out, "fastq_screen", params.multiqc_dir)
-
-  repair.out.collect().set { repair_out }
   multiqc(repair_out, "repair", params.multiqc_dir)
 }
 
