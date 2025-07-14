@@ -1,12 +1,11 @@
 process index_genome {
-  label 'map_reads'
+  label 'index_genome'
   tag "$genome"
 
   input:
-  path genome from genome/*.fa
+  path genome
 
   output:
-  path(genome)
   path("${genome}.*")
   val(genome)
 
