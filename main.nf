@@ -24,7 +24,8 @@ workflow {
     | fastp_trim_5
     | fastq_screen
     | repair
-    | map_reads(genome_info)
+    .combine(genome_info)
+    | map_reads
 
   fastp_trim_3.out.collect().set { fastp3_out }
   multiqc(fastp3_out, "fastp_trim_3", params.multiqc_dir)
