@@ -13,7 +13,7 @@ workflow {
 
   // Run MultiQC on raw data
   read_pairs.collect().set { raw_reads }
-  multiqc(raw_reads, step: "raw", outdir: params.multiqc_dir)
+  multiqc(raw_reads, "raw", params.multiqc_dir)
 
   // Download and prepare genome
   fetch_genome(params.accession)
@@ -28,19 +28,19 @@ workflow {
     | map_reads(genome_info, outdir: "data/fq_fp1_clmp_fp5_scrn_rpr_map")
 
   fastp_trim_3.out.collect().set { fastp3_out }
-  multiqc(fastp3_out, step: "fastp_trim_3", outdir: params.multiqc_dir)
+  multiqc(fastp3_out, "fastp_trim_3", params.multiqc_dir)
 
   clumpify.out.collect().set { clumpify_out }
-  multiqc(clumpify_out, step: "clumpify", outdir: params.multiqc_dir)
+  multiqc(clumpify_out, "clumpify", params.multiqc_dir)
 
   fastp_trim_5.out.collect().set { fastp5_out }
-  multiqc(fastp5_out, step: "fastp_trim_5", outdir: params.multiqc_dir)
+  multiqc(fastp5_out, "fastp_trim_5", params.multiqc_dir)
 
   fastq_screen.out.collect().set { fastqscreen_out }
-  multiqc(fastqscreen_out, step: "fastq_screen", outdir: params.multiqc_dir)
+  multiqc(fastqscreen_out, "fastq_screen", params.multiqc_dir)
 
   repair.out.collect().set { repair_out }
-  multiqc(repair_out, step: "repair", outdir: params.multiqc_dir)
+  multiqc(repair_out, "repair", params.multiqc_dir)
 }
 
 include { fastp_trim_3 } from './modules/fastp_trim_3.nf'
