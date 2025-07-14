@@ -1,15 +1,18 @@
 process map_reads {
+  label 'map_reads'
   tag "$sample_id"
 
   input:
   tuple val(sample_id), path(reads)
-  path genome from params.genome
+  val genome
+  val outdir
 
   output:
-  path("${sample_id}.bam")
+  path("${outdir}/${sample_id}.bam")
 
   script:
   """
-  bwa mem $genome ${reads[0]} ${reads[1]} | samtools view -Sb - > ${sample_id}.bam
+  mkdir -p ${outdir}
+  bwa mem ${genome} ${reads[0]} ${reads[1]} | samtools view -Sb - > ${outdir}/${sample_id}.bam
   """
 }
