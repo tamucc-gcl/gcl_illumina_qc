@@ -20,11 +20,16 @@ workflow {
     .set { genome_info }
 
   fastp_trim_3(read_pairs, outdir: "data/fq_fp1")
-    | clumpify(outdir: "data/fq_fp1_clmp")
-    | fastp_trim_5(outdir: "data/fq_fp1_clmp_fp5")
-    | fastq_screen(outdir: "data/fq_fp1_clmp_fp5_scrn")
-    | repair(outdir: "data/fq_fp1_clmp_fp5_scrn_rpr")
-    | map_reads(genome_info, outdir: "data/fq_fp1_clmp_fp5_scrn_rpr_map")
+    | map { it -> tuple(it[0], it[1], "data/fq_fp1_clmp") }
+    | clumpify
+    | map { it -> tuple(it[0], it[1], "data/fq_fp1_clmp_fp5") }
+    | fastp_trim_5
+    | map { it -> tuple(it[0], it[1], "data/fq_fp1_clmp_fp5_scrn") }
+    | fastq_screen
+    | map { it -> tuple(it[0], it[1], "data/fq_fp1_clmp_fp5_scrn_rpr") }
+    | repair
+    | map { it -> tuple(it[0], it[1], genome_info, "data/fq_fp1_clmp_fp5_scrn_rpr_map") }
+    | map_reads
 
   fastp_trim_3.out.collect().set { fastp3_out }
   multiqc(fastp3_out, "fastp_trim_3", params.multiqc_dir)
