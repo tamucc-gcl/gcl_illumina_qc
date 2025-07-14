@@ -19,7 +19,7 @@ workflow {
   prepare_genome(params.accession)
     .set { genome_info }
 
-  // Run read prep and mapping
+  // Run read prep
   fastp_trim_3(read_pairs)
     | clumpify
     | fastp_trim_5
@@ -27,8 +27,10 @@ workflow {
     | repair
     | set { repaired_reads }
 
-  repaired_reads.combine(genome_info)
-    | map_reads
+  // mapping
+  repaired_reads.set { repaired_ch }
+  genome_info.set { genome_ch }
+  map_reads(repaired_ch, genome_ch)
 
   fastp_trim_3.out.collect().set { fastp3_out }
   multiqc(fastp3_out, "fastp_trim_3", params.multiqc_dir)
