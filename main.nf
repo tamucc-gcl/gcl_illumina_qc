@@ -20,10 +20,10 @@ workflow {
     .set { genome_info }
 
   fastp_trim_3(read_pairs)
-    | clumpify(outdir: "data/fq_fp1_clmp")
-    | fastp_trim_5(outdir: "data/fq_fp1_clmp_fp5")
-    | fastq_screen(outdir: "data/fq_fp1_clmp_fp5_scrn")
-    | repair(outdir: "data/fq_fp1_clmp_fp5_scrn_rpr")
+    | clumpify()
+    | fastp_trim_5()
+    | fastq_screen()
+    | repair()
     | map_reads(genome_info)
 
   fastp_trim_3.out.collect().set { fastp3_out }
