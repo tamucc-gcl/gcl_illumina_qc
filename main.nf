@@ -21,10 +21,10 @@ workflow {
 
   // Run read prep and mapping
   fastp_trim_3(read_pairs)
-    | clumpify()
-    | fastp_trim_5()
-    | fastq_screen()
-    | repair()
+    | clumpify
+    | fastp_trim_5
+    | fastq_screen
+    | repair
     | set { repaired_reads }
 
   repaired_reads.combine(genome_info)
