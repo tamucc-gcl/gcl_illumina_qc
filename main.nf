@@ -20,12 +20,15 @@ workflow {
     .set { genome_info }
 
   // Run read prep
-  fastp_trim_3(read_pairs)
-    | clumpify
-    | fastp_trim_5
-    | fastq_screen
-    | repair
-    | set { repaired_reads }
+  fastp_trim_3(read_pairs).set { trimmed_3 }
+
+  clumpify(read_pairs).set { clumped }
+
+  fastp_trim_5(read_pairs).set { trimmed_5 }
+
+  fastq_screen(read_pairs).set { screened }
+
+  repair(read_pairs).set { repaired_reads }
 
   // mapping
   repaired_reads.set { repaired_ch }
