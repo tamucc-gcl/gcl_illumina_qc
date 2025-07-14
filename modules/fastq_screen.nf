@@ -4,15 +4,14 @@ process fastq_screen {
 
   input:
   tuple val(sample_id), path(reads)
-  val outdir
 
   output:
-  tuple val(sample_id), path("${outdir}/*screen.txt")
+  tuple val(sample_id), path("data/fq_fp1_clmp_fp2_scrn/*screen.txt")
 
   script:
   """
-  mkdir -p ${outdir}
-  fastq_screen --outdir ${outdir} --threads 4 ${reads[0]}
-  fastq_screen --outdir ${outdir} --threads 4 ${reads[1]}
+  mkdir -p data/fq_fp1_clmp_fp2_scrn
+  fastq_screen --outdir data/fq_fp1_clmp_fp2_scrn --threads 4 ${reads[0]}
+  fastq_screen --outdir data/fq_fp1_clmp_fp2_scrn --threads 4 ${reads[1]}
   """
 }
