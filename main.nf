@@ -2,8 +2,8 @@
 
 nextflow.enable.dsl=2
 
-params.reads = "data/raw_fq/*_{1,2}.fq.gz"
-params.accession = "GCA_042920385.1"
+params.reads = "data/*_{1,2}.fq.gz"
+params.accession = "GCF_002234675.1"
 params.outdir = "results"
 params.multiqc_dir = "results/multiqc"
 
