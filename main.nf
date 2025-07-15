@@ -13,6 +13,7 @@ workflow {
      * INPUT (raw pairs + early MultiQC)
      * ------------------------------------------------------------------- */
     Channel.fromFilePairs( params.reads, flat: true )
+            .view()          // ← quick sanity‑check
             .set { raw_reads_pairs }
 
     // ── MultiQC on raw data ----------------------------------------------
