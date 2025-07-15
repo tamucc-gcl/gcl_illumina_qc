@@ -12,7 +12,7 @@ process fetch_genome {
   """
   mkdir -p genome/raw
   datasets download genome accession ${accession} --filename genome.zip --include genome
-  unzip genome.zip -d genome/raw/
+  unzip genome.zip -d ./
   find genome/raw/ -name '*fna' -exec cat {} + > genome/genome.fa
   """
 }
