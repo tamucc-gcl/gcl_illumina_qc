@@ -7,13 +7,12 @@ process multiqc {
         val(step)
 
     output:
-        path("${params.multiqc_dir}/multiqc_${step}_report.html")
+        path("multiqc_${step}_report.html")
 
     script:
     """
-    mkdir -p ${params.multiqc_dir}
     multiqc ${reports.join(' ')} \
-           -o ${params.multiqc_dir} \
+           -o . \
            -n multiqc_${step}_report.html \
            -f
     """

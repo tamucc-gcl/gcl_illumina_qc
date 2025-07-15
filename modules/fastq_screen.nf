@@ -14,16 +14,25 @@ process fastq_screen {
 
     script:
     """
-    # Run fastq_screen on both reads
-    fastq_screen --threads ${task.cpus ?: 4} --outdir . ${read1}
-    fastq_screen --threads ${task.cpus ?: 4} --outdir . ${read2}
+    # For now, create dummy screen reports and pass files through unchanged
+    # This allows pipeline development while fastq_screen databases are configured
     
-    # Rename output files to predictable names
-    mv \$(basename ${read1} .fq.gz)_screen.txt ${sample_id}_R1_screen.txt
-    mv \$(basename ${read2} .fq.gz)_screen.txt ${sample_id}_R2_screen.txt
+    echo "# FastQ Screen dummy report for ${sample_id} R1" > ${sample_id}_R1_screen.txt
+    echo "# This is a placeholder until fastq_screen databases are configured" >> ${sample_id}_R1_screen.txt
+    echo "Library: \$(basename ${read1})" >> ${sample_id}_R1_screen.txt
+    echo "Sequences processed: 1000" >> ${sample_id}_R1_screen.txt
+    echo "Species: Human (dummy)" >> ${sample_id}_R1_screen.txt
     
-    # Create symbolic links for the reads (fastq_screen doesn't modify the reads)
+    echo "# FastQ Screen dummy report for ${sample_id} R2" > ${sample_id}_R2_screen.txt
+    echo "# This is a placeholder until fastq_screen databases are configured" >> ${sample_id}_R2_screen.txt
+    echo "Library: \$(basename ${read2})" >> ${sample_id}_R2_screen.txt
+    echo "Sequences processed: 1000" >> ${sample_id}_R2_screen.txt
+    echo "Species: Human (dummy)" >> ${sample_id}_R2_screen.txt
+    
+    # Pass through the fastq files unchanged
     ln -sf ${read1} ${sample_id}_screen_1.fq.gz
     ln -sf ${read2} ${sample_id}_screen_2.fq.gz
+    
+    echo "FastQ Screen step completed (passthrough mode)"
     """
 }
