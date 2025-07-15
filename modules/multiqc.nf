@@ -1,15 +1,14 @@
 /*
  * Consolidated MultiQC module
- * Groups all result files by processing step and produces a single report per step.
+ * Assumes upstream channel delivers a tuple:
+ *   [ step , outdir , reports ]  where `reports` is a *list*
  */
 process multiqc {
     label 'multiqc'
     tag   "$step"
 
     input:
-        val  step                        // e.g. 'raw_fastqc'
-        val  outdir                      // e.g. 'results/multiqc'
-        path reports, collect: true      // all HTML / JSON / txt files to include
+        tuple val(step), val(outdir), val(reports)
 
     output:
         path("${outdir}/multiqc_${step}_report.html")
@@ -17,7 +16,7 @@ process multiqc {
     script:
     """
     mkdir -p ${outdir}
-    multiqc ${reports} \
+    multiqc ${reports.join(' ')} \
             -o ${outdir} \
             -n multiqc_${step}_report.html \
             --force
