@@ -35,7 +35,7 @@ process fastp_trim_3 {
 		--trim_poly_g \
 		--poly_g_min_len 10 \
 		--trim_poly_x \
-		--report_title "First Trim 4 De Novo"
+		--report_title "First Trim 4 De Novo" \
         -w ${task.cpus ?: 4}
     """
 }
