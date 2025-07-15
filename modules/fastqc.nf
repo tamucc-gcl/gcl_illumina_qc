@@ -2,14 +2,14 @@
  * FastQC on raw reads
  */
 process fastqc_raw {
-
+    label 'fastqc'
     tag "$sample_id"
 
     input:
         tuple val(sample_id), path(reads)
 
     output:
-        tuple val(sample_id), path("${sample_id}_R*_fastqc.*")
+        tuple val(sample_id), path("${sample_id}_R1_fastqc.html"), path("${sample_id}_R1_fastqc.zip"), path("${sample_id}_R2_fastqc.html"), path("${sample_id}_R2_fastqc.zip")
 
     script:
     """
