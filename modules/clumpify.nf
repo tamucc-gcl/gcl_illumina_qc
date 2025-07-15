@@ -16,7 +16,9 @@ process clumpify {
 
     script:
     """
-    temp_dir=$(mktemp -d)
+    temp_dir=\$(mktemp -d)
+    trap "rm -rf \$temp_dir" EXIT
+    
     clumpify.sh \
         in=${read1} in2=${read2} \
         out=${sample_id}_clumped_1.fq.gz \
