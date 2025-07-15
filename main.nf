@@ -21,7 +21,6 @@ workflow {
     //----------------------------------------------------------------
     Channel
         .fromFilePairs( params.reads, flat: true )
-        .map { sid, reads -> tuple( sid, reads[0], reads[1] ) }
         .set { raw_reads_pairs }
 
     //----------------------------------------------------------------
