@@ -81,4 +81,4 @@ include { multiqc as multiqc_fastp3 }      from "./modules/multiqc.nf"
 include { multiqc as multiqc_clumpify }    from "./modules/multiqc.nf"
 include { multiqc as multiqc_fastp5 }      from "./modules/multiqc.nf"
 include { multiqc as multiqc_fastqscreen } from "./modules/multiqc.nf"
-include { multiqc as multiqc_repair }      from "./modules/multiqc.nf"}
+include { multiqc as multiqc_repair }      from "./modules/multiqc.nf"
