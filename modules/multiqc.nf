@@ -1,9 +1,6 @@
-/**
- * Combine FastQC / fastp / other reports with MultiQC
- */
 process multiqc {
-
-    tag "$step"                                  // shows step name in NF UI
+    label 'multiqc'
+    tag "$step"
 
     input:
         tuple val(step), val(outdir), path(reports) collect: true
