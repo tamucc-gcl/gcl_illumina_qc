@@ -1,7 +1,6 @@
 process fastp_trim_5 {
-
-    label 'fastp_trim_5'
-    tag "$sample_id"
+    label 'fastp'
+    tag   "${sample_id}"
 
     input:
         tuple val(sample_id), path(read1), path(read2)
@@ -16,8 +15,8 @@ process fastp_trim_5 {
     script:
     """
     fastp \
-        --in1 ${read1} \
-        --in2 ${read2} \
+        --in1 ${reads[0]} \
+        --in2 ${reads[1]} \
         --out1 ${sample_id}_trim5_1.fq.gz \
         --out2 ${sample_id}_trim5_2.fq.gz \
         --json ${sample_id}_trim5_fastp.json \
@@ -40,4 +39,6 @@ process fastp_trim_5 {
         -w ${task.cpus ?: 4}
     """
 }
+
+
 		

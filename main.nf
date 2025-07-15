@@ -99,10 +99,52 @@ workflow {
                     .mix( multiqc_repair_in ) | multiqc
 */
 
+<<<<<<< HEAD
     //----------------------------------------------------------------
     // 6. MAPPING
     //----------------------------------------------------------------
     map_reads( repaired_reads_ch, genome_ch )
+=======
+
+
+    fastp_trim_5.out
+              .map{ sid, f1, f2, json, html -> [json, html] }
+              .flatten()
+              .set { fastp5_qc_ch }
+
+    multiqc_fastp5(
+        fastp5_qc_ch,
+        "fastp_trim_5",
+        params.multiqc_dir
+    )
+
+
+
+
+    fastq_screen.out
+               .map{ sid, r1, r2 -> [r1, r2] }
+               .flatten()
+               .set { fastqscreen_files_ch }
+
+    multiqc_fastqscreen(
+        fastqscreen_files_ch,
+        "fastq_screen",
+        params.multiqc_dir
+    )
+
+
+    repair.out
+               .map{ sid, r1, r2 -> [r1, r2] }
+               .flatten()
+               .set { repair_files_ch }
+
+    multiqc_repair(
+        repair_files_ch,
+        "repair",
+        params.multiqc_dir
+    )
+
+>>>>>>> parent of 1fd308f (updates)
 }
 
 //--------------------------------------------------------------------

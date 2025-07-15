@@ -4,21 +4,37 @@
  *   [ step , outdir , reports ]  where `reports` is a *list*
  */
 process multiqc {
+<<<<<<< HEAD
     label 'multiqc'
     tag   "$step"
 
     input:
         tuple val(step), val(outdir), val(reports)
+=======
+  label 'multiqc'
 
-    output:
-        path("${outdir}/multiqc_${step}_report.html")
+  input:
+  path files
+  val step
+  val outdir
 
-    script:
+  output:
+    path "multiqc/${task}_report.html"
+>>>>>>> parent of 1fd308f (updates)
+
+  script:
     """
+<<<<<<< HEAD
     mkdir -p ${outdir}
     multiqc ${reports.join(' ')} \
             -o ${outdir} \
             -n multiqc_${step}_report.html \
             --force
+=======
+    multiqc \
+      ${inputs} \
+      -o results/multiqc \
+      -n ${task}_report.html
+>>>>>>> parent of 1fd308f (updates)
     """
 }
