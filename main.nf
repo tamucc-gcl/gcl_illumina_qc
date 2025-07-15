@@ -159,10 +159,15 @@ workflow {
 workflow prepare_genome {
     take:
         accession
+    
     main:
-        fetch_genome( accession ) | index_genome
+        fetch_genome(accession)
+        index_genome(fetch_genome.out.genome)
+        
     emit:
-        index_genome.out
+        genome = fetch_genome.out.genome
+        index = index_genome.out[0]  // First output (genome tuple)
+        index_files = index_genome.out.index_files  // Second output (index files)
 }
 
 //--------------------------------------------------------------------
