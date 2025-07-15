@@ -150,7 +150,17 @@ workflow {
     // Step 6: Map reads to genome
     map_reads( repair.out, prepare_genome.out.genome )
     
-    // Note: You could add samtools stats/flagstats here and include in a final MultiQC report
+    // Step 7: Generate BAM statistics
+    samtools_stats( map_reads.out )
+    
+    // Final MultiQC report including all BAM statistics
+    multiqc_final(
+        samtools_stats.out
+            .map{ sid, stats, flagstats -> [stats, flagstats] }
+            .flatten()
+            .collect(),
+        Channel.value('final_bam_stats')
+    )
 }
 
 //--------------------------------------------------------------------
@@ -162,7 +172,7 @@ workflow prepare_genome {
     
     main:
         fetch_genome(accession)
-        index_genome(fetch_genome.out.genome)
+        index_genome(fetch_genome.out)  // Fixed: use fetch_genome.out instead of fetch_genome.out.genome
         
     emit:
         genome = index_genome.out[0]  // First output: tuple path(genome), val(genome_path)
@@ -178,6 +188,7 @@ include { fastp_trim_5 }      from './modules/fastp_trim_5.nf'
 include { fastq_screen }      from './modules/fastq_screen.nf'
 include { repair }            from './modules/repair.nf'
 include { map_reads }         from './modules/map_reads.nf'
+include { samtools_stats }    from './modules/samtools_stats.nf'
 include { fetch_genome }      from './modules/fetch_genome.nf'
 include { index_genome }      from './modules/index_genome.nf'
 
@@ -195,3 +206,4 @@ include { multiqc as multiqc_clumpify } from './modules/multiqc.nf'
 include { multiqc as multiqc_trim5 }    from './modules/multiqc.nf'
 include { multiqc as multiqc_screen }   from './modules/multiqc.nf'
 include { multiqc as multiqc_repair }   from './modules/multiqc.nf'
+include { multiqc as multiqc_final }    from './modules/multiqc.nf'
