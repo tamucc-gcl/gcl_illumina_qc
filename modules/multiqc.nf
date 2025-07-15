@@ -4,7 +4,9 @@ process multiqc {
     tag   "$step"
 
     input:
-        tuple val(step), val(outdir), path(reports, collect: true)
+        tuple val(step),                \
+              val(outdir),              \
+              path(reports, collect: true)   // ← collect INSIDE path()
 
     output:
         path "${outdir}/multiqc_${step}_report.html"
