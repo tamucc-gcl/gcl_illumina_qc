@@ -1,6 +1,7 @@
 /*
  * gcl_illumina_qc / main.nf
- * Full pipeline with genome download/indexing, mapping, QC stages, and consolidated MultiQC reports.
+ * Genome download/index -> mapping, QC chain, MultiQC per stage.
+ * Compatible with Nextflow 25.04.2 (no broadcast, mix, merge of value channels).
  */
 
 nextflow.enable.dsl = 2
@@ -24,26 +25,31 @@ params.reads       = "data/fq_raw/*.{1,2}.fq.gz"    // paired‑end,  sampleID.1
 params.accession   = "GCA_042920385.1"              // NCBI assembly accession
 
 // ------------------  Input channels  ------------------
-// Paired FASTQ reads
 Channel
     .fromFilePairs(params.reads, flat: true)
     .map { id, reads -> tuple(id, reads[0], reads[1]) }
     .set { reads_ch }
 
-// Genome accessions
 Channel
     .from( (params.accession instanceof String)
            ? params.accession.split(/[,\s]+/)
            : params.accession )
     .set { accession_ch }
 
+// ------------------  Helper to build MultiQC tuples  ------------------
+def consolidate = { ch, step ->
+    ch.flatMap { it[1..-1] }            // leave only files
+      .collect()
+      .map { files -> tuple(step, 'results/multiqc', files) }
+}
+
 // ------------------  Workflow  ------------------
 workflow {
 
-    // Genome download → index
+    // Genome download -> index
     genome_fa_ch = accession_ch | fetch_genome | index_genome
 
-    // QC processing chain
+    // QC pipeline
     fastqc_raw_out = fastqc_raw(reads_ch)
     trim3_out      = fastp_trim_3(reads_ch)
     clumpify_out   = clumpify(trim3_out)
@@ -51,24 +57,14 @@ workflow {
     fqscreen_out   = fastq_screen(trim5_out)
     repair_out     = repair(fqscreen_out)
 
-    // Read mapping (each sample paired with the single genome)
+    // Mapping (each sample paired with the genome fasta)
     map_reads_out  = map_reads(reads_ch, genome_fa_ch)
 
-    // ---------- Consolidated MultiQC ----------
-    def consolidate = { channel, step ->
-        channel
-            .flatMap { it[1..-1] }     // keep only file paths
-            .collect()
-            .map { files -> tuple(step, 'results/multiqc', files) }
-    }
-
-    Channel.merge(
-        consolidate(fastqc_raw_out , 'raw_fastqc'),
-        consolidate(trim3_out      , 'fastp_trim_3'),
-        consolidate(clumpify_out   , 'clumpify'),
-        consolidate(trim5_out      , 'fastp_trim_5'),
-        consolidate(fqscreen_out   , 'fastq_screen'),
-        consolidate(repair_out     , 'repair')
-    )
-    | multiqc
+    // MultiQC per stage
+    multiqc( consolidate(fastqc_raw_out , 'raw_fastqc') )
+    multiqc( consolidate(trim3_out      , 'fastp_trim_3') )
+    multiqc( consolidate(clumpify_out   , 'clumpify') )
+    multiqc( consolidate(trim5_out      , 'fastp_trim_5') )
+    multiqc( consolidate(fqscreen_out   , 'fastq_screen') )
+    multiqc( consolidate(repair_out     , 'repair') )
 }
