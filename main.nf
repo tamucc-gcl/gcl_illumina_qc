@@ -35,9 +35,9 @@ workflow {
         .flatten()
         .map { f -> tuple('raw_fastqc', params.multiqc_dir, f) }
         .set { multiqc_raw_in }
-
+/*
     multiqc_raw_in | multiqc            // emits multiqc_${step}_report.html
-
+*/
 
     //----------------------------------------------------------------
     // 3. GENOME PREP  (download ➜ index)
