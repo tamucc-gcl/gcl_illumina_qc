@@ -18,13 +18,13 @@ process fastp_trim_3 {
 
     script:
     """
-    fastp \\
-        -i   ${reads[0]}  -I   ${reads[1]}  \\
-        -o   ${sample_id}_trim3_1.fq.gz \\
-        -O   ${sample_id}_trim3_2.fq.gz \\
-        --trim_tail1 1 --trim_tail2 1 \\
-        --json ${sample_id}_trim3_fastp.json \\
-        --html ${sample_id}_trim3_fastp.html \\
+    fastp \
+        -i   ${reads[0]}  -I   ${reads[1]}  \
+        -o   ${sample_id}_trim3_1.fq.gz \
+        -O   ${sample_id}_trim3_2.fq.gz \
+        --trim_tail1 1 --trim_tail2 1 \
+        --json ${sample_id}_trim3_fastp.json \
+        --html ${sample_id}_trim3_fastp.html \
         -w ${task.cpus ?: 4}
     """
 }
