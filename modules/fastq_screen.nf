@@ -6,7 +6,7 @@ process fastq_screen {
   tuple val(sample_id), path(reads)
 
   output:
-  tuple val(sample_id), path("${sample_id}_screen_1.fq.gz"), path("${sample_id}_screen_2.fq.gz")
+  tuple val(sample_id), path("${sample_id}_screen_*.fq.gz")
 
   script:
   """

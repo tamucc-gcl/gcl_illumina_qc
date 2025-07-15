@@ -6,9 +6,7 @@ process repair {
   tuple val(sample_id), path(reads)
 
   output:
-  tuple val(sample_id), 
-        path("${sample_id}_repaired_1.fq.gz"), 
-        path("${sample_id}_repaired_2.fq.gz")
+  tuple val(sample_id), path("${sample_id}_repaired_*.fq.gz")
 
   script:
   """

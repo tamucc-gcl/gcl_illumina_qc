@@ -6,7 +6,7 @@ process fastp_trim_5 {
   tuple val(sample_id), path(reads)
 
   output:
-  tuple val(sample_id), path("${sample_id}_trim5_1.fq.gz"), path("${sample_id}_trim5_2.fq.gz")
+  tuple val(sample_id), path("${sample_id}_trim5_*.fq.gz")
 
   script:
   """
