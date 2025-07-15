@@ -37,14 +37,16 @@ include { map_reads       } from './modules/map_reads.nf'
 // ---------------------------------------------------------------------
 //  Parameters
 // ---------------------------------------------------------------------
-params.accession = params.accession ?: 'GCF_PLACEHOLDER'   // replace or set via CLI
+//params.accession = params.accession ?: 'GCF_PLACEHOLDER'   // replace or set via CLI
+params.reads       = "data/fq_raw/*.{1,2}.fq.gz"    // paired‑end,  sampleID.1.fq.gz / .2.fq.gz
+params.accession   = "GCA_042920385.1"              // NCBI assembly accession
 
 // ---------------------------------------------------------------------
 //  Inputs
 // ---------------------------------------------------------------------
 // Paired FASTQ reads
 Channel
-    .fromFilePairs('fq_raw/*.{1,2}.fq.gz', flat: true)
+    .fromFilePairs(params.reads, flat: true)
     .map { sample_id, reads -> tuple(sample_id, reads[0], reads[1]) }
     .set { reads_ch }
 
