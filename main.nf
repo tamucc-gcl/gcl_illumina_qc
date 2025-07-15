@@ -2,7 +2,7 @@
 
 nextflow.enable.dsl = 2
 
-params.reads       = "data/raw_fq/*_{1,2}.fq.gz"   // paired‑end R1/R2 files
+params.reads       = "data/raw_fq/*.{1,2}.fq.gz"   // paired‑end R1/R2 files
 params.accession   = "GCA_042920385.1"              // NCBI assembly to fetch
 params.outdir      = "results"
 params.multiqc_dir = "${params.outdir}/multiqc"
