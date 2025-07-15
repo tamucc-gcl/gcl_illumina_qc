@@ -12,8 +12,7 @@ process clumpify {
     output:
         tuple val(sample_id),
               path("${sample_id}_clumped_1.fq.gz"),
-              path("${sample_id}_clumped_2.fq.gz"),
-              path("${sample_id}_clumpify.txt")
+              path("${sample_id}_clumped_2.fq.gz")
 
     script:
     """

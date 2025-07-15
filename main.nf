@@ -86,9 +86,7 @@ workflow {
         params.multiqc_dir
     )
 
-
-
-
+/*
     clumpify.out
               .map{ sid, r1, r2, stats -> stats }
               .set { clumpify_stats_ch }
@@ -98,7 +96,7 @@ workflow {
         "clumpify",
         params.multiqc_dir
     )
-
+*/
 
 
 
