@@ -28,14 +28,18 @@ workflow {
     raw_reads_pairs | fastqc_raw
 
     // consolidate raw FastQC reports into one MultiQC HTML
+    // gather FastQC HTML+ZIP files into one channel for MultiQC
+    fastqc_raw.out
+              .map{ sid, f1, f2, f3, f4 -> [f1,f2,f3,f4] }
+              .flatten()
+              .set { raw_fastqc_files_ch }
+
     multiqc_raw(
-        fastqc_raw.out
-                   .map{ sid, files -> files }
-                   .flatten()
-                   .collect(),
+        raw_fastqc_files_ch,
         "raw_fastqc",
         params.multiqc_dir
     )
+
 
 
 
@@ -71,47 +75,70 @@ workflow {
     //----------------------------------------------------------------
     // 6. MultiQC reports for each step
     //----------------------------------------------------------------
+    fastp_trim_3.out
+              .map{ sid, f1, f2, json, html -> [json, html] }
+              .flatten()
+              .set { fastp3_qc_ch }
+
     multiqc_fastp3(
-        fastp_trim_3.out.map{ sid, f1, f2, json, html -> [json, html] }.flatten().collect(),
+        fastp3_qc_ch,
         "fastp_trim_3",
         params.multiqc_dir
     )
 
 
 
+
+    clumpify.out
+              .map{ sid, r1, r2, stats -> stats }
+              .set { clumpify_stats_ch }
+
     multiqc_clumpify(
-        clumpify.out.map{ sid, r1, r2, stats -> stats }.collect(),
+        clumpify_stats_ch,
         "clumpify",
         params.multiqc_dir
     )
 
 
 
+
+    fastp_trim_5.out
+              .map{ sid, f1, f2, json, html -> [json, html] }
+              .flatten()
+              .set { fastp5_qc_ch }
+
     multiqc_fastp5(
-        fastp_trim_5.out.map{ sid, f1, f2, json, html -> [json, html] }.flatten().collect(),
+        fastp5_qc_ch,
         "fastp_trim_5",
         params.multiqc_dir
     )
 
 
 
-    multiqc_fastqscreen(
+
     fastq_screen.out
-               .map{ sid, reads -> reads }   // drop the ID
-               .flatten()                    // turn [[R1,R2],[R1,R2]…] → [R1,R2,R1,R2…]
-               .collect(),
-    "fastq_screen",
-    params.multiqc_dir
+               .map{ sid, r1, r2 -> [r1, r2] }
+               .flatten()
+               .set { fastqscreen_files_ch }
+
+    multiqc_fastqscreen(
+        fastqscreen_files_ch,
+        "fastq_screen",
+        params.multiqc_dir
     )
 
-    multiqc_repair(
+
     repair.out
-               .map{ sid, reads -> reads }   // drop the ID
-               .flatten()                    // turn [[R1,R2],[R1,R2]…] → [R1,R2,R1,R2…]
-               .collect(),
-    "repair",
-    params.multiqc_dir
+               .map{ sid, r1, r2 -> [r1, r2] }
+               .flatten()
+               .set { repair_files_ch }
+
+    multiqc_repair(
+        repair_files_ch,
+        "repair",
+        params.multiqc_dir
     )
+
 }
 
 //--------------------------------------------------------------------
