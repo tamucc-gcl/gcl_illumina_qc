@@ -18,14 +18,13 @@ process clumpify {
     """
     temp_dir=\$(mktemp -d)
     trap "rm -rf \$temp_dir" EXIT
-    
+
     clumpify.sh \
         in=${read1} in2=${read2} \
         out=${sample_id}_clumped_1.fq.gz \
         out2=${sample_id}_clumped_2.fq.gz \
         overwrite=t \
 	    usetmpdir=t \
-	    tmpdir=${temp_dir} \
         deletetemp=t \
         dedupe=t \
 	    addcount=t \
