@@ -13,6 +13,6 @@ process multiqc {
   """
   mkdir -p ${outdir}/multiqc_${step}
   cp -r $files ${outdir}/multiqc_${step}/
-  multiqc ${outdir}/multiqc_${step} -o ${outdir} -n multiqc_${step}_report.html
+  multiqc ${outdir}/multiqc_${step} -o ${outdir} -n multiqc_${step}_report.html --force
   """
 }

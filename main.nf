@@ -22,15 +22,22 @@ workflow {
     raw_reads_pairs.view { "FOUND ▶️  $it" }
 
     //----------------------------------------------------------------
-    // 2. Early MultiQC on the raw FASTQs  (optional)
-    //----------------------------------------------------------------
-    raw_reads_pairs                         // [id,[r1,r2]]
-        .map{ id, reads -> reads }          // keep only the 2‑file list
-        .flatten()                          // path, path, path …
-        .collect()                          // to a single list object
-        .set{ raw_fastq_files }
+    
+//----------------------------------------------------------------
+// 2. QC on raw reads (FastQC + MultiQC)
+//----------------------------------------------------------------
+fastqc_raw_out = fastqc_raw( raw_reads_pairs )
 
-    multiqc_raw( raw_fastq_files, "raw", params.multiqc_dir )
+multiqc_raw(
+    fastqc_raw_out.out
+                  .map{ sid, files -> files }   // drop the ID
+                  .flatten()
+                  .collect(),
+    "raw_fastqc",
+    params.multiqc_dir
+)
+
+
 
     //----------------------------------------------------------------
     // 3. GENOME PREPARATION (download ➜ index)
@@ -127,8 +134,10 @@ include { map_reads }      from './modules/map_reads.nf'
 include { fetch_genome }   from './modules/fetch_genome.nf'
 include { index_genome }   from './modules/index_genome.nf'
 
+include { fastqc_raw }        from './modules/fastqc.nf'
+include { multiqc as multiqc_raw }        from './modules/multiqc.nf'
+
 // MultiQC (aliased per context to avoid duplicate process names)
-include { multiqc as multiqc_raw }         from './modules/multiqc.nf'
 include { multiqc as multiqc_fastp3 }      from './modules/multiqc.nf'
 include { multiqc as multiqc_clumpify }    from './modules/multiqc.nf'
 include { multiqc as multiqc_fastp5 }      from './modules/multiqc.nf'
