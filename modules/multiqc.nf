@@ -8,9 +8,7 @@ process multiqc {
     tag   "$step"                      // shows step name in NF UI
 
     input:
-        tuple val(step), val(outdir), path(reports)    // ≤— only ONE channel now
-            collect: true                              // gather all reports
-                                                      // for the same step/outdir
+        tuple val(step), val(outdir), path(reports, collect: true)
 
     output:
         path "${outdir}/multiqc_${step}_report.html"
