@@ -11,10 +11,12 @@ process repair {
   script:
   """
   repair.sh \
-    in=${reads[0]} \
+    in1=${reads[0]} \
     in2=${reads[1]} \
-    out=${sample_id}_repaired_1.fq.gz \
+    out1=${sample_id}_repaired_1.fq.gz \
     out2=${sample_id}_repaired_2.fq.gz \
-    outs=stdout
+    outs=stdout \
+    overwrite=t \
+    repair
   """
 }
