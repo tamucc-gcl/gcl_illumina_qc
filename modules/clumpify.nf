@@ -17,11 +17,19 @@ process clumpify {
 
     script:
     """
+    temp_dir=$(mktemp -d)
     clumpify.sh \
         in=${read1} in2=${read2} \
         out=${sample_id}_clumped_1.fq.gz \
         out2=${sample_id}_clumped_2.fq.gz \
-        dedupe=t subs=0 ecc=t dupesubs=0 \
-        stats=${sample_id}_clumpify.txt
+        overwrite=t \
+	    usetmpdir=t \
+	    tmpdir=${temp_dir} \
+        deletetemp=t \
+        dedupe=t \
+	    addcount=t \
+	    subs=2 \
+	    containment=t \
+	    consensus=f
     """
 }
