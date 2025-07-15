@@ -163,5 +163,7 @@ include { index_genome }      from './modules/index_genome.nf'
 
 include { fastqc_raw }        from './modules/fastqc.nf'
 
+/*
 // one MultiQC process, aliased as simply `multiqc`
 include { multiqc }           from './modules/multiqc.nf'
+*/
