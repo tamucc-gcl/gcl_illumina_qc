@@ -1,24 +1,25 @@
 /*
- * Consolidated MultiQC module
- * Assumes upstream channel delivers a tuple:
- *   [ step , outdir , reports ]  where `reports` is a *list*
+ * Consolidated MultiQC module – revised
+ * Expects a tuple: [ step , outdir , reports ]  (reports = list or Path)
  */
 process multiqc {
-  label 'multiqc'
 
-  input:
-  path files
-  val step
-  val outdir
+    label 'multiqc'
+    tag   "$step"                      // shows step name in NF UI
 
-  output:
-    path "multiqc/${task}_report.html"
+    input:
+        tuple val(step), val(outdir), path(reports)    // ≤— only ONE channel now
+            collect: true                              // gather all reports
+                                                      // for the same step/outdir
 
-  script:
+    output:
+        path "${outdir}/multiqc_${step}_report.html"
+
+    script:
     """
     multiqc \
-      ${inputs} \
-      -o results/multiqc \
-      -n ${task}_report.html
+        ${reports.join(' ')} \
+        -o ${outdir} \
+        -n multiqc_${step}_report.html
     """
 }

@@ -99,7 +99,6 @@ workflow {
                     .mix( multiqc_repair_in ) | multiqc
 */
 
-
     fastp_trim_5.out
               .map{ sid, f1, f2, json, html -> [json, html] }
               .flatten()
@@ -110,8 +109,6 @@ workflow {
         "fastp_trim_5",
         params.multiqc_dir
     )
-
-
 
 
     fastq_screen.out
