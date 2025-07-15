@@ -55,6 +55,7 @@ workflow {
     | repair                   
     | set { repaired_reads_ch }
 
+/*
     //----------------------------------------------------------------
     // 5. MULTIQC FOR EACH QC STEP
     //----------------------------------------------------------------
@@ -98,7 +99,7 @@ workflow {
                     .mix( multiqc_fastq_in )
                     .mix( multiqc_repair_in ) | multiqc
 */
-
+/*
     fastp_trim_5.out
               .map{ sid, f1, f2, json, html -> [json, html] }
               .flatten()
@@ -133,7 +134,7 @@ workflow {
         "repair",
         params.multiqc_dir
     )
-
+*/
 }
 
 //--------------------------------------------------------------------
