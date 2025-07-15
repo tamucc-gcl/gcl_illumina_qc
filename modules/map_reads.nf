@@ -1,17 +1,25 @@
 process map_reads {
-  label 'map_reads'
-  tag "$sample_id"
+    label 'map_reads'
+    tag "$sample_id"
 
-  input:
-  tuple val(sample_id), path(reads)
-  val genome
+    input:
+        tuple val(sample_id), path(read1), path(read2)
+        tuple path(genome), val(genome_path)
 
-  output:
-  path("${sample_id}.bam")
+    output:
+        tuple val(sample_id), path("${sample_id}.bam")
 
-  script:
-  """
-  bwa mem2 ${genome} ${reads[0]} ${reads[1]} | \
-    samtools view -Sb - > ${sample_id}.bam
-  """
+    script:
+    """
+    bwa mem -t ${task.cpus ?: 8} \
+        -R "@RG\\tID:${sample_id}\\tSM:${sample_id}\\tPL:ILLUMINA" \
+        ${genome} \
+        ${read1} \
+        ${read2} | \
+    samtools view -@ ${task.cpus ?: 8} -Sb - | \
+    samtools sort -@ ${task.cpus ?: 8} -o ${sample_id}.bam -
+
+    # Index the BAM file
+    samtools index ${sample_id}.bam
+    """
 }

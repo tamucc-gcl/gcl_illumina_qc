@@ -35,5 +35,10 @@ source activate nextflow
 nextflow run gcl_illumina_qc/main.nf -resume -with-dag flowchart.dot
 dot -Tpng flowchart.dot -o flowchart.png
 
-nextflow run gcl_illumina_qc/main.nf -profile standard -resume
+nextflow run gcl_illumina_qc/main.nf \
+    -profile standard \
+    -resume \
+    --reads "data/fq_raw/*.{1,2}.fq.gz" \
+    --accession "GCA_042920385.1" \
+    --outdir "results"
 ```

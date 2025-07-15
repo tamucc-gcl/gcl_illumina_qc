@@ -1,5 +1,5 @@
-// main.nf – GCL Illumina QC pipeline
-// July 2025 — consolidated MultiQC per step
+// main.nf – GCL Illumina QC pipeline
+// July 2025 — consolidated MultiQC per step
 
 nextflow.enable.dsl = 2
 
@@ -27,113 +27,132 @@ workflow {
     //----------------------------------------------------------------
     // 2. FASTQC ON RAW READS  ➜  MULTIQC (raw_fastqc)
     //----------------------------------------------------------------
-    raw_reads_pairs | fastqc_raw
+    fastqc_raw( raw_reads_pairs )
 
-    // collect all FastQC HTML/ZIP files for MultiQC
-    fastqc_raw.out
-        .map{ sid, html1, html2, zip1, zip2 -> [html1, html2, zip1, zip2] }
-        .flatten()
-        .map { f -> tuple('raw_fastqc', params.multiqc_dir, f) }
-        .set { multiqc_raw_in }
-
-    multiqc_raw_in | multiqc            // emits multiqc_${step}_report.html
-
+    // MultiQC for raw FastQC
+    multiqc_raw( 
+        fastqc_raw.out
+            .map{ sid, html1, zip1, html2, zip2 -> [html1, zip1, html2, zip2] }
+            .flatten()
+            .collect(),
+        Channel.value('raw_fastqc')
+    )
 
     //----------------------------------------------------------------
-    // 3. GENOME PREP  (download ➜ index)
+    // 3. GENOME PREP  (download ➜ index)
     //----------------------------------------------------------------
     Channel.value( params.accession ) | prepare_genome | set { genome_ch }
 
     //----------------------------------------------------------------
-    // 4. READ PREP  (3′ trim → clumpify → 5′ trim → FastQ‑Screen → repair)
+    // 4. QC PIPELINE STEPS
     //----------------------------------------------------------------
-    raw_reads_pairs                
-    | fastp_trim_3             
-    | clumpify                 
-    | fastp_trim_5             
-    | fastq_screen            
-    | repair                   
-    | set { repaired_reads_ch }
-
-    //----------------------------------------------------------------
-    // 5. MULTIQC FOR EACH QC STEP
-    //----------------------------------------------------------------
-    // fastp_trim_3
-    fastp_trim_3.out
-        .map{ sid, r1, r2, json, html -> [json, html] }
-        .flatten()
-        .map { f -> tuple('fastp_trim_3', params.multiqc_dir, f) }
-        .set { multiqc_fastp3_in }
-
-    // clumpify (stats file)
-    clumpify.out
-        .map{ sid, r1, r2, stats -> stats }
-        .map { f -> tuple('clumpify', params.multiqc_dir, f) }
-        .set { multiqc_clumpify_in }
-
-    // fastp_trim_5
-    fastp_trim_5.out
-        .map{ sid, r1, r2, json, html -> [json, html] }
-        .flatten()
-        .map { f -> tuple('fastp_trim_5', params.multiqc_dir, f) }
-        .set { multiqc_fastp5_in }
-
-    // fastq_screen (txt reports)
-    fastq_screen.out
-        .map{ sid, r1, r2, txt1, txt2 -> [txt1, txt2] }
-        .flatten()
-        .map { f -> tuple('fastq_screen', params.multiqc_dir, f) }
-        .set { multiqc_fastq_in }
-
-    // repair – nothing QC‑related, but include to track reads length/GC if desired
-    repair.out
-        .map{ sid, r1, r2 -> [r1, r2] }
-        .flatten()
-        .map { f -> tuple('repair', params.multiqc_dir, f) }
-        .set { multiqc_repair_in }
-/*
-    // Merge all QC inputs into one channel and run MultiQC once per step
-    multiqc_fastp3_in.mix( multiqc_clumpify_in )
-                    .mix( multiqc_fastp5_in )
-                    .mix( multiqc_fastq_in )
-                    .mix( multiqc_repair_in ) | multiqc
-*/
-
-    fastp_trim_5.out
-              .map{ sid, f1, f2, json, html -> [json, html] }
-              .flatten()
-              .set { fastp5_qc_ch }
-
-    multiqc_fastp5(
-        fastp5_qc_ch,
-        "fastp_trim_5",
-        params.multiqc_dir
+    
+    // Step 1: 3' trimming with fastp
+    fastp_trim_3( raw_reads_pairs )
+    
+    // FastQC after 3' trimming
+    fastqc_trim3( 
+        fastp_trim_3.out.map{ sid, r1, r2, json, html -> tuple(sid, r1, r2) }
     )
-
-
-    fastq_screen.out
-               .map{ sid, r1, r2 -> [r1, r2] }
-               .flatten()
-               .set { fastqscreen_files_ch }
-
-    multiqc_fastqscreen(
-        fastqscreen_files_ch,
-        "fastq_screen",
-        params.multiqc_dir
+    
+    // MultiQC for 3' trimming (fastp + FastQC)
+    multiqc_trim3(
+        fastp_trim_3.out
+            .map{ sid, r1, r2, json, html -> [json, html] }
+            .flatten()
+            .mix( 
+                fastqc_trim3.out
+                    .map{ sid, html1, zip1, html2, zip2 -> [html1, zip1, html2, zip2] }
+                    .flatten()
+            )
+            .collect(),
+        Channel.value('fastp_trim_3')
     )
-
-
-    repair.out
-               .map{ sid, r1, r2 -> [r1, r2] }
-               .flatten()
-               .set { repair_files_ch }
-
+    
+    // Step 2: Clumpify
+    clumpify( fastp_trim_3.out )
+    
+    // FastQC after clumpify
+    fastqc_clumpify( 
+        clumpify.out.map{ sid, r1, r2, stats -> tuple(sid, r1, r2) }
+    )
+    
+    // MultiQC for clumpify (stats + FastQC)
+    multiqc_clumpify(
+        clumpify.out
+            .map{ sid, r1, r2, stats -> stats }
+            .mix( 
+                fastqc_clumpify.out
+                    .map{ sid, html1, zip1, html2, zip2 -> [html1, zip1, html2, zip2] }
+                    .flatten()
+            )
+            .collect(),
+        Channel.value('clumpify')
+    )
+    
+    // Step 3: 5' trimming with fastp
+    fastp_trim_5( clumpify.out.map{ sid, r1, r2, stats -> tuple(sid, r1, r2) } )
+    
+    // FastQC after 5' trimming
+    fastqc_trim5( 
+        fastp_trim_5.out.map{ sid, r1, r2, json, html -> tuple(sid, r1, r2) }
+    )
+    
+    // MultiQC for 5' trimming (fastp + FastQC)
+    multiqc_trim5(
+        fastp_trim_5.out
+            .map{ sid, r1, r2, json, html -> [json, html] }
+            .flatten()
+            .mix( 
+                fastqc_trim5.out
+                    .map{ sid, html1, zip1, html2, zip2 -> [html1, zip1, html2, zip2] }
+                    .flatten()
+            )
+            .collect(),
+        Channel.value('fastp_trim_5')
+    )
+    
+    // Step 4: FastQ Screen
+    fastq_screen( fastp_trim_5.out.map{ sid, r1, r2, json, html -> tuple(sid, r1, r2) } )
+    
+    // FastQC after fastq_screen
+    fastqc_screen( 
+        fastq_screen.out.map{ sid, r1, r2, txt1, txt2 -> tuple(sid, r1, r2) }
+    )
+    
+    // MultiQC for fastq_screen (screen reports + FastQC)
+    multiqc_screen(
+        fastq_screen.out
+            .map{ sid, r1, r2, txt1, txt2 -> [txt1, txt2] }
+            .flatten()
+            .mix( 
+                fastqc_screen.out
+                    .map{ sid, html1, zip1, html2, zip2 -> [html1, zip1, html2, zip2] }
+                    .flatten()
+            )
+            .collect(),
+        Channel.value('fastq_screen')
+    )
+    
+    // Step 5: Repair
+    repair( fastq_screen.out.map{ sid, r1, r2, txt1, txt2 -> tuple(sid, r1, r2) } )
+    
+    // FastQC after repair
+    fastqc_repair( repair.out )
+    
+    // MultiQC for repair (FastQC only)
     multiqc_repair(
-        repair_files_ch,
-        "repair",
-        params.multiqc_dir
+        fastqc_repair.out
+            .map{ sid, html1, zip1, html2, zip2 -> [html1, zip1, html2, zip2] }
+            .flatten()
+            .collect(),
+        Channel.value('repair')
     )
-
+    
+    // Step 6: Map reads to genome
+    map_reads( repair.out, genome_ch )
+    
+    // Note: You could add samtools stats/flagstats here and include in a final MultiQC report
 }
 
 //--------------------------------------------------------------------
@@ -161,6 +180,16 @@ include { fetch_genome }      from './modules/fetch_genome.nf'
 include { index_genome }      from './modules/index_genome.nf'
 
 include { fastqc_raw }        from './modules/fastqc.nf'
+include { fastqc_generic as fastqc_trim3 }    from './modules/fastqc.nf'
+include { fastqc_generic as fastqc_clumpify } from './modules/fastqc.nf'
+include { fastqc_generic as fastqc_trim5 }    from './modules/fastqc.nf'
+include { fastqc_generic as fastqc_screen }   from './modules/fastqc.nf'
+include { fastqc_generic as fastqc_repair }   from './modules/fastqc.nf'
 
-// one MultiQC process, aliased as simply `multiqc`
-include { multiqc }           from './modules/multiqc.nf'
+// MultiQC processes with aliases
+include { multiqc as multiqc_raw }      from './modules/multiqc.nf'
+include { multiqc as multiqc_trim3 }    from './modules/multiqc.nf'
+include { multiqc as multiqc_clumpify } from './modules/multiqc.nf'
+include { multiqc as multiqc_trim5 }    from './modules/multiqc.nf'
+include { multiqc as multiqc_screen }   from './modules/multiqc.nf'
+include { multiqc as multiqc_repair }   from './modules/multiqc.nf'

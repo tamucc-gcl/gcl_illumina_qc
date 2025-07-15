@@ -1,18 +1,20 @@
 process multiqc {
-
     label 'multiqc'
     tag   "$step"
 
     input:
-        tuple val(step), val(outdir), path reports collect: true
+        path(reports)
+        val(step)
 
     output:
-        path "${outdir}/multiqc_${step}_report.html"
+        path("${params.multiqc_dir}/multiqc_${step}_report.html")
 
     script:
     """
+    mkdir -p ${params.multiqc_dir}
     multiqc ${reports.join(' ')} \
-           -o ${outdir} \
-           -n multiqc_${step}_report.html
+           -o ${params.multiqc_dir} \
+           -n multiqc_${step}_report.html \
+           -f
     """
 }

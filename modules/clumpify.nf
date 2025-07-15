@@ -12,7 +12,8 @@ process clumpify {
     output:
         tuple val(sample_id),
               path("${sample_id}_clumped_1.fq.gz"),
-              path("${sample_id}_clumped_2.fq.gz")
+              path("${sample_id}_clumped_2.fq.gz"),
+              path("${sample_id}_clumpify_stats.txt")
 
     script:
     """
@@ -24,12 +25,13 @@ process clumpify {
         out=${sample_id}_clumped_1.fq.gz \
         out2=${sample_id}_clumped_2.fq.gz \
         overwrite=t \
-	    usetmpdir=t \
+        usetmpdir=t \
         deletetemp=t \
         dedupe=t \
-	    addcount=t \
-	    subs=2 \
-	    containment=t \
-	    consensus=f
+        addcount=t \
+        subs=2 \
+        containment=t \
+        consensus=f \
+        stats=${sample_id}_clumpify_stats.txt
     """
 }
