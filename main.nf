@@ -1,6 +1,9 @@
 /*
  * gcl_illumina_qc / main.nf
- * Complete QC chain with consolidated MultiQC reporting for:
+ * Full QC chain with consolidated MultiQC reporting and genome download,
+ * indexing, and read mapping.
+ *
+ * QC stages consolidated:
  *   • raw FastQC
  *   • fastp_trim_3
  *   • clumpify
@@ -8,12 +11,10 @@
  *   • fastq_screen
  *   • repair
  *
- * Assumes each module emits a tuple whose first element is `val(sample_id)`
- * followed by one or more `path` items (reads, logs, html, json, etc.).
- * MultiQC ignores file types it doesn't recognise, so we simply feed all
- * non‑sample‑id paths to the report step.
+ * Mapping stage:
+ *   • fetch_genome -> index_genome -> map_reads
  *
- * Update the glob in `fromFilePairs` to match your raw fastq layout.
+ * Edit the glob in `fromFilePairs` and the `params.accession` as needed.
  */
 
 nextflow.enable.dsl = 2
@@ -29,77 +30,95 @@ include { fastq_screen    } from './modules/fastq_screen.nf'
 include { repair          } from './modules/repair.nf'
 include { multiqc         } from './modules/multiqc.nf'
 
+include { fetch_genome    } from './modules/fetch_genome.nf'
+include { index_genome    } from './modules/index_genome.nf'
+include { map_reads       } from './modules/map_reads.nf'
+
+// ---------------------------------------------------------------------
+//  Parameters
+// ---------------------------------------------------------------------
+params.accession = params.accession ?: 'GCF_PLACEHOLDER'   // replace or set via CLI
+
 // ---------------------------------------------------------------------
 //  Inputs
 // ---------------------------------------------------------------------
+// Paired FASTQ reads
 Channel
-    .fromFilePairs('fq_raw/*_{1,2}.fq.gz', flat: true)
+    .fromFilePairs('fq_raw/*.{1,2}.fq.gz', flat: true)
     .map { sample_id, reads -> tuple(sample_id, reads[0], reads[1]) }
     .set { reads_ch }
+
+// Single accession (or multiple, comma‑separated) for genome retrieval
+Channel
+    .from( params.accession instanceof String
+           ? params.accession.split(/[,\s]+/)
+           : params.accession )
+    .set { accession_ch }
 
 // ---------------------------------------------------------------------
 //  Workflow definition
 // ---------------------------------------------------------------------
 workflow {
 
-    // ----------------  Step 0: raw FastQC  ---------------------------
+    // ---------- RAW FastQC ----------
     fastqc_raw_out = fastqc_raw(reads_ch)
 
-    // ----------------  Step 1: fastp 3′ trim  ------------------------
+    // ---------- fastp 3′ trim ----------
     trim3_out      = fastp_trim_3(reads_ch)
 
-    // ----------------  Step 2: clumpify  -----------------------------
+    // ---------- clumpify ----------
     clumpify_out   = clumpify(trim3_out)
 
-    // ----------------  Step 3: fastp 5′ trim  ------------------------
+    // ---------- fastp 5′ trim ----------
     trim5_out      = fastp_trim_5(clumpify_out)
 
-    // ----------------  Step 4: FastQ‑Screen  -------------------------
+    // ---------- FastQ‑Screen ----------
     fqscreen_out   = fastq_screen(trim5_out)
 
-    // ----------------  Step 5: BBduk repair  -------------------------
+    // ---------- BBduk repair ----------
     repair_out     = repair(fqscreen_out)
+
+    // ----------------------------------------------------------------
+    //  Genome download and indexing
+    // ----------------------------------------------------------------
+    genome_fa_ch   = accession_ch
+                     | fetch_genome
+                     | index_genome
+
+    // Broadcast genome so every sample gets it
+    genome_fa_ch.broadcast().set { genome_bcast_ch }
+
+    // ---------- Read mapping ----------
+    reads_plus_genome = reads_ch.combine(genome_bcast_ch)
+                          .map { read_tup, genome ->
+                              tuple(read_tup[0], read_tup[1], read_tup[2], genome)
+                          }
+    map_reads_out   = map_reads(reads_plus_genome)
 
     // ----------------------------------------------------------------
     //  Consolidated MultiQC channels
     // ----------------------------------------------------------------
-    multiqc_raw_ch       = fastqc_raw_out                                        \
-                            .flatMap{ it[1..-1] }                                \
-                            .collect()                                           \
-                            .map{ files -> tuple('raw_fastqc', 'results/multiqc', files) }
+    def consolidate = { ch, step ->
+        ch.flatMap { it[1..-1] }
+          .collect()
+          .map { files -> tuple(step, 'results/multiqc', files) }
+    }
 
-    multiqc_trim3_ch     = trim3_out                                             \
-                            .flatMap{ it[1..-1] }                                \
-                            .collect()                                           \
-                            .map{ files -> tuple('fastp_trim_3', 'results/multiqc', files) }
+    multiqc_raw_ch       = consolidate(fastqc_raw_out      , 'raw_fastqc')
+    multiqc_trim3_ch     = consolidate(trim3_out           , 'fastp_trim_3')
+    multiqc_clumpify_ch  = consolidate(clumpify_out        , 'clumpify')
+    multiqc_trim5_ch     = consolidate(trim5_out           , 'fastp_trim_5')
+    multiqc_screen_ch    = consolidate(fqscreen_out        , 'fastq_screen')
+    multiqc_repair_ch    = consolidate(repair_out          , 'repair')
 
-    multiqc_clumpify_ch  = clumpify_out                                          \
-                            .flatMap{ it[1..-1] }                                \
-                            .collect()                                           \
-                            .map{ files -> tuple('clumpify', 'results/multiqc', files) }
-
-    multiqc_trim5_ch     = trim5_out                                             \
-                            .flatMap{ it[1..-1] }                                \
-                            .collect()                                           \
-                            .map{ files -> tuple('fastp_trim_5', 'results/multiqc', files) }
-
-    multiqc_screen_ch    = fqscreen_out                                          \
-                            .flatMap{ it[1..-1] }                                \
-                            .collect()                                           \
-                            .map{ files -> tuple('fastq_screen', 'results/multiqc', files) }
-
-    multiqc_repair_ch    = repair_out                                            \
-                            .flatMap{ it[1..-1] }                                \
-                            .collect()                                           \
-                            .map{ files -> tuple('repair', 'results/multiqc', files) }
-
-    // Merge all QC channels and spawn MultiQC once per `step`
-    [ multiqc_raw_ch,
-      multiqc_trim3_ch,
-      multiqc_clumpify_ch,
-      multiqc_trim5_ch,
-      multiqc_screen_ch,
-      multiqc_repair_ch ]                                                         \
-      .mix()                                                                      \
-      | multiqc
+    // Merge all QC channels
+    Channel.merge(
+        multiqc_raw_ch,
+        multiqc_trim3_ch,
+        multiqc_clumpify_ch,
+        multiqc_trim5_ch,
+        multiqc_screen_ch,
+        multiqc_repair_ch
+    )
+    | multiqc
 }
