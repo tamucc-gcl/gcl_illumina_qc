@@ -99,13 +99,6 @@ workflow {
                     .mix( multiqc_repair_in ) | multiqc
 */
 
-<<<<<<< HEAD
-    //----------------------------------------------------------------
-    // 6. MAPPING
-    //----------------------------------------------------------------
-    map_reads( repaired_reads_ch, genome_ch )
-=======
-
 
     fastp_trim_5.out
               .map{ sid, f1, f2, json, html -> [json, html] }
@@ -144,7 +137,6 @@ workflow {
         params.multiqc_dir
     )
 
->>>>>>> parent of 1fd308f (updates)
 }
 
 //--------------------------------------------------------------------
