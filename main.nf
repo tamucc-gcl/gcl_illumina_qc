@@ -91,13 +91,13 @@ workflow {
         .flatten()
         .map { f -> tuple('repair', params.multiqc_dir, f) }
         .set { multiqc_repair_in }
-
+/*
     // Merge all QC inputs into one channel and run MultiQC once per step
     multiqc_fastp3_in.mix( multiqc_clumpify_in )
                     .mix( multiqc_fastp5_in )
                     .mix( multiqc_fastq_in )
                     .mix( multiqc_repair_in ) | multiqc
-
+*/
 
     //----------------------------------------------------------------
     // 6. MAPPING
