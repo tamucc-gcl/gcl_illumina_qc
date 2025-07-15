@@ -9,7 +9,7 @@ process multiqc {
     input:
         val  step                        // e.g. 'raw_fastqc'
         val  outdir                      // e.g. 'results/multiqc'
-        path reports collect: true       // all HTML / JSON / txt files to include
+        path reports, collect: true      // all HTML / JSON / txt files to include
 
     output:
         path("${outdir}/multiqc_${step}_report.html")
