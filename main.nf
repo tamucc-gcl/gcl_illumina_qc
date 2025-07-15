@@ -2,33 +2,45 @@
 
 nextflow.enable.dsl = 2
 
-params.reads       = "data/fq_raw/*.{1,2}.fq.gz"   // paired‑end R1/R2 files
+//--------------------------------------------------------------------
+// USER PARAMETERS
+//--------------------------------------------------------------------
+params.reads       = "data/fq_raw/*.{1,2}.fq.gz"    // paired‑end files like sample.1.fq.gz & sample.2.fq.gz
 params.accession   = "GCA_042920385.1"              // NCBI assembly to fetch
 params.outdir      = "results"
 params.multiqc_dir = "${params.outdir}/multiqc"
 
-/* ========================================================================== */
+//--------------------------------------------------------------------
 workflow {
-    /* ----------------------------------------------------------------------
-     * INPUT (raw pairs + early MultiQC)
-     * ------------------------------------------------------------------- */
-    Channel.fromFilePairs( params.reads, flat: true )
-            .view()          // ← quick sanity‑check
-            .set { raw_reads_pairs }
+    //----------------------------------------------------------------
+    // 1. INPUT  (raw read pairs)
+    //----------------------------------------------------------------
+    Channel.fromFilePairs( params.reads )               // emits: [ id , [r1,r2] ]
+           .set { raw_reads_pairs }
 
-    // ── MultiQC on raw data ----------------------------------------------
-    raw_reads_pairs.collect().set { raw_reads_for_multiqc }
-    multiqc_raw( raw_reads_for_multiqc, "raw", params.multiqc_dir )
+    //── quick sanity‑check (remove once happy) ─────────────────────
+    raw_reads_pairs.view { "FOUND ▶️  $it" }
 
-    /* ----------------------------------------------------------------------
-     * GENOME PREPARATION (download ➜ index)
-     * ------------------------------------------------------------------- */
-    prepare_genome( params.accession ).set { genome_ch }
+    //----------------------------------------------------------------
+    // 2. Early MultiQC on the raw FASTQs  (optional)
+    //----------------------------------------------------------------
+    raw_reads_pairs                         // [id,[r1,r2]]
+        .map{ id, reads -> reads }          // keep only the 2‑file list
+        .flatten()                          // path, path, path …
+        .collect()                          // to a single list object
+        .set{ raw_fastq_files }
 
-    /* ----------------------------------------------------------------------
-     * READ‑PREP CHAIN
-     *   3′‑trim ➜ clumpify ➜ 5′‑trim ➜ fastq_screen ➜ repair
-     * ------------------------------------------------------------------- */
+    multiqc_raw( raw_fastq_files, "raw", params.multiqc_dir )
+
+    //----------------------------------------------------------------
+    // 3. GENOME PREPARATION (download ➜ index)
+    //----------------------------------------------------------------
+    prepare_genome( params.accession )
+        .set { genome_ch }
+
+    //----------------------------------------------------------------
+    // 4. READ‑PREP CHAIN: 3′trim ➜ clumpify ➜ 5′trim ➜ fastq_screen ➜ repair
+    //----------------------------------------------------------------
     raw_reads_pairs \
         | fastp_trim_3 \
         | clumpify     \
@@ -37,15 +49,14 @@ workflow {
         | repair       \
         | set { repaired_reads_ch }
 
-    /* ----------------------------------------------------------------------
-     * MAPPING
-     * ------------------------------------------------------------------- */
+    //----------------------------------------------------------------
+    // 5. MAPPING
+    //----------------------------------------------------------------
     map_reads( repaired_reads_ch, genome_ch )
 
-    /* ----------------------------------------------------------------------
-     * MULTIQC REPORTS FOR EACH PREP STEP
-     * (pass the collected output channel as the first argument)
-     * ------------------------------------------------------------------- */
+    //----------------------------------------------------------------
+    // 6. MultiQC reports for each step
+    //----------------------------------------------------------------
     multiqc_fastp3(      fastp_trim_3.out.collect(),  "fastp_trim_3",   params.multiqc_dir )
     multiqc_clumpify(    clumpify.out.collect(),      "clumpify",       params.multiqc_dir )
     multiqc_fastp5(      fastp_trim_5.out.collect(),  "fastp_trim_5",   params.multiqc_dir )
@@ -53,9 +64,10 @@ workflow {
     multiqc_repair(      repair.out.collect(),        "repair",         params.multiqc_dir )
 }
 
-/* ========================================================================== */
+//--------------------------------------------------------------------
+// SUB‑WORKFLOW: fetch + index genome
+//--------------------------------------------------------------------
 workflow prepare_genome {
-    // sub‑workflow: fetch genome FASTA → build BWA‑MEM2 index
     take:
         accession
     main:
@@ -64,8 +76,9 @@ workflow prepare_genome {
         index_genome.out
 }
 
-/* ========================================================================== */
-// MODULE IMPORTS ------------------------------------------------------------
+//--------------------------------------------------------------------
+// MODULE IMPORTS
+//--------------------------------------------------------------------
 include { fastp_trim_3 }   from './modules/fastp_trim_3.nf'
 include { clumpify }       from './modules/clumpify.nf'
 include { fastp_trim_5 }   from './modules/fastp_trim_5.nf'
