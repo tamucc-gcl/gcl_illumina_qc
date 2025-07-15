@@ -115,7 +115,7 @@ workflow {
 
 
     fastq_screen.out
-               .map{ sid, r1, r2 -> [r1, r2] }
+               .map{ sid, r1, r2, txt1, txt2 -> [txt1, txt2] }
                .flatten()
                .set { fastqscreen_files_ch }
 
@@ -127,7 +127,7 @@ workflow {
 
 
     repair.out
-               .map{ sid, r1, r2 -> [r1, r2] }
+               .map{ sid, r1, r2, txt1, txt2 -> [txt1, txt2] }
                .flatten()
                .set { repair_files_ch }
 

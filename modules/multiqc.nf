@@ -1,19 +1,23 @@
 process multiqc {
-  label 'multiqc'
 
-  input:
-  path files
-  val step
-  val outdir
+    label 'multiqc'
+    tag "${step}"
 
-  output:
-    path "multiqc/${task}_report.html"
+    input:
+        path inputs
+        val step
+        val outdir
 
-  script:
+    output:
+        path("${outdir}/multiqc_${step}_report.html")
+
+    script:
     """
-    multiqc \
-      ${inputs} \
-      -o results/multiqc \
-      -n ${task}_report.html
+    mkdir -p ${outdir}/multiqc_${step}
+    cp -r ${inputs} ${outdir}/multiqc_${step}/
+    multiqc ${outdir}/multiqc_${step} \
+           -o ${outdir} \
+           -n multiqc_${step}_report.html \
+           --force
     """
 }
