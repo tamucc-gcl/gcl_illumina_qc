@@ -3,7 +3,11 @@ process clumpify {
     tag   "$sample_id"
 
     input:
-        tuple val(sample_id), path(read1), path(read2)
+        tuple val(sample_id), 
+              path(read1), 
+              path(read2), 
+              path(json),   // fastp report (ignored)
+              path(html)    // fastp report (ignored)
 
     output:
         tuple val(sample_id),
