@@ -22,28 +22,35 @@ workflow {
     raw_reads_pairs.view { "FOUND ▶️  $it" }
 
     //----------------------------------------------------------------
-    
-//----------------------------------------------------------------
-// 2. QC on raw reads (FastQC + MultiQC)
-//----------------------------------------------------------------
-fastqc_raw_out = fastqc_raw( raw_reads_pairs )
+    // 2. QC on raw reads (FastQC + MultiQC)
+    //----------------------------------------------------------------
+    // run FastQC on each raw read pair
+    raw_reads_pairs | fastqc_raw
 
-multiqc_raw(
-    fastqc_raw_out.out
-                  .map{ sid, files -> files }   // drop the ID
-                  .flatten()
-                  .collect(),
-    "raw_fastqc",
-    params.multiqc_dir
-)
+    // consolidate raw FastQC reports into one MultiQC HTML
+    multiqc_raw(
+        fastqc_raw.out
+                   .map{ sid, files -> files }
+                   .flatten()
+                   .collect(),
+        "raw_fastqc",
+        params.multiqc_dir
+    )
+
 
 
 
     //----------------------------------------------------------------
     // 3. GENOME PREPARATION (download ➜ index)
     //----------------------------------------------------------------
-    prepare_genome( params.accession )
-        .set { genome_ch }
+    //----------------------------------------------------------------
+    // 3. GENOME PREPARATION (download ➜ index)
+    //----------------------------------------------------------------
+    Channel.value(params.accession) \
+        | fetch_genome \
+        | index_genome \
+        | set { genome_ch }
+
 
     //----------------------------------------------------------------
     // 4. READ‑PREP CHAIN: 3′trim ➜ clumpify ➜ 5′trim ➜ fastq_screen ➜ repair
