@@ -39,7 +39,7 @@ workflow {
     //----------------------------------------------------------------
     // 3. GENOME PREP  (download ➜ index)
     //----------------------------------------------------------------
-    Channel.value( params.accession ) | prepare_genome | set { genome_ch }
+    prepare_genome( Channel.value( params.accession ) )
 
     //----------------------------------------------------------------
     // 4. QC PIPELINE STEPS
@@ -148,7 +148,7 @@ workflow {
     )
     
     // Step 6: Map reads to genome
-    map_reads( repair.out, genome_ch )
+    map_reads( repair.out, prepare_genome.out.genome )
     
     // Note: You could add samtools stats/flagstats here and include in a final MultiQC report
 }
@@ -165,9 +165,8 @@ workflow prepare_genome {
         index_genome(fetch_genome.out.genome)
         
     emit:
-        genome = fetch_genome.out.genome
-        index = index_genome.out[0]  // First output (genome tuple)
-        index_files = index_genome.out.index_files  // Second output (index files)
+        genome = index_genome.out[0]  // First output: tuple path(genome), val(genome_path)
+        index_files = index_genome.out.index_files  // Named output: index files
 }
 
 //--------------------------------------------------------------------
