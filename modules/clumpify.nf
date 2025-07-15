@@ -32,6 +32,6 @@ process clumpify {
         subs=2 \
         containment=t \
         consensus=f \
-        stats=${sample_id}_clumpify_stats.txt
+        2>&1 | tee ${sample_id}_clumpify_stats.txt
     """
 }

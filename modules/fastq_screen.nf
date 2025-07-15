@@ -23,7 +23,7 @@ process fastq_screen {
     mv \$(basename ${read2} .fq.gz)_screen.txt ${sample_id}_R2_screen.txt
     
     # Create symbolic links for the reads (fastq_screen doesn't modify the reads)
-    ln -s ${read1} ${sample_id}_screen_1.fq.gz
-    ln -s ${read2} ${sample_id}_screen_2.fq.gz
+    ln -sf ${read1} ${sample_id}_screen_1.fq.gz
+    ln -sf ${read2} ${sample_id}_screen_2.fq.gz
     """
 }
