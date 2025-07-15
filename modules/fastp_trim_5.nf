@@ -8,9 +8,9 @@ process fastp_trim_5 {
     output:
         tuple val(sample_id),
               path("${sample_id}_trim5_1.fq.gz"),
-              path("${sample_id}_trim5_2.fq.gz") emit: reads
-        path("${sample_id}_trim5_fastp.json")     emit: json
-        path("${sample_id}_trim5_fastp.html")     emit: html
+              path("${sample_id}_trim5_2.fq.gz"),
+              path("${sample_id}_trim5_fastp.json"),
+              path("${sample_id}_trim5_fastp.html")
 
     script:
     """

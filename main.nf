@@ -72,24 +72,27 @@ workflow {
     // 6. MultiQC reports for each step
     //----------------------------------------------------------------
     multiqc_fastp3(
-        Channel.merge(fastp_trim_3.json, fastp_trim_3.html).collect(),
+        fastp_trim_3.out.map{ sid, f1, f2, json, html -> [json, html] }.flatten().collect(),
         "fastp_trim_3",
         params.multiqc_dir
     )
 
 
+
     multiqc_clumpify(
-        clumpify.stats.collect(),
+        clumpify.out.map{ sid, r1, r2, stats -> stats }.collect(),
         "clumpify",
         params.multiqc_dir
     )
 
 
+
     multiqc_fastp5(
-        Channel.merge(fastp_trim_5.json, fastp_trim_5.html).collect(),
+        fastp_trim_5.out.map{ sid, f1, f2, json, html -> [json, html] }.flatten().collect(),
         "fastp_trim_5",
         params.multiqc_dir
     )
+
 
 
     multiqc_fastqscreen(
