@@ -15,7 +15,7 @@ process fastq_screen {
     """
     fastq_screen \\
         --aligner bowtie2 \\
-        --conf ${params.conffile} \\
+        --conf ${params.decontam_conffile} \\
         --threads ${task.cpus ?: 4} \\
         --tag \\
         --force \\

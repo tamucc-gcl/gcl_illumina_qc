@@ -8,7 +8,7 @@ nextflow.enable.dsl = 2
 //--------------------------------------------------------------------
 params.reads       = "data/fq_raw/*.{1,2}.fq.gz"    // paired‑end,  sampleID.1.fq.gz / .2.fq.gz
 params.accession   = "GCA_042920385.1"              // NCBI assembly accession
-params.conffile    = "/work/birdlab/fastq_screen_databases/runFQSCRN_6_nofish.conf"  // FastQ Screen config file
+params.decontam_conffile    = "/work/birdlab/fastq_screen_databases/example_fastq-screen.conf"  // FastQ Screen config file
 params.outdir      = "results"
 
 //--------------------------------------------------------------------
