@@ -1,5 +1,5 @@
 process fastp_trim_3 {
-    label 'fastp'
+    label 'fastp3'
     tag   "${sample_id}"
 
     input:
