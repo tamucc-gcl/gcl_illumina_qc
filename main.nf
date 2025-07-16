@@ -173,7 +173,7 @@ workflow {
     map_reads( repair.out, prepare_genome.out.genome )
     
     // Step 7: Generate BAM statistics
-    samtools_stats( map_reads.out[0] )
+    samtools_stats( map_reads.out )
     
     // Create mapping summary instead of problematic MultiQC final step
     samtools_summary(

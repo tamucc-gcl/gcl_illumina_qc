@@ -15,10 +15,17 @@ process repair {
     repair.sh \
         in1=${read1} \
         in2=${read2} \
-        out1=${sample_id}_fp1-clmp-fp2-fqscrn-rprd.r1.fq.gz \
-        out2=${sample_id}_fp1-clmp-fp2-fqscrn-rprd.r2.fq.gz \
+        out1=${sample_id}_tmp.r1.fq.gz \
+        out2=${sample_id}_tmp.r2.fq.gz \
         outs=stdout \
         overwrite=t \
         repair
+    
+    rename.sh \
+        ow=t \
+        in1="${sample_id}_tmp.r1.fq.gz" \
+        in2="${sample_id}_tmp.r2.fq.gz" \
+        out1="${sample_id}_fp1-clmp-fp2-fqscrn-rprd.r1.fq.gz" \
+        out2="${sample_id}_fp1-clmp-fp2-fqscrn-rprd.r2.fq.gz"
     """
 }
