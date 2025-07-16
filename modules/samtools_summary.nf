@@ -28,11 +28,11 @@ process samtools_summary {
             mapped_paired=\$(grep "^SN.*reads mapped and paired:" "\$stats_file" | awk '{print \$NF}')
             properly_paired=\$(grep "^SN.*reads properly paired:" "\$stats_file" | awk '{print \$NF}')
             
-            # Calculate mapping rate as percentage
+            # Calculate mapping rate as percentage using awk
             if [ "\$total_reads" -gt 0 ]; then
-                mapping_rate=\$(echo "scale=2; \$mapped_reads * 100 / \$total_reads" | bc)
+                mapping_rate=\$(awk "BEGIN {printf \"%.2f\", \$mapped_reads * 100 / \$total_reads}")
             else
-                mapping_rate="0"
+                mapping_rate="0.00"
             fi
             
             # Add to summary file
