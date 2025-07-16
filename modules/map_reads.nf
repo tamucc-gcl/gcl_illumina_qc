@@ -11,7 +11,7 @@ process map_reads {
 
     script:
     """
-    bwa mem -t ${task.cpus ?: 8} \
+    bwa-mem2 mem -t ${task.cpus ?: 8} \
         -R "@RG\\tID:${sample_id}\\tSM:${sample_id}\\tPL:ILLUMINA" \
         ${genome} \
         ${read1} \

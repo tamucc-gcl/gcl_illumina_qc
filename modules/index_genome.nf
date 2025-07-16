@@ -13,6 +13,6 @@ process index_genome {
 
   script:
   """
-  bwa index ${genome}
+  bwa-mem2 index ${genome}
   """
 }
