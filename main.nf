@@ -175,13 +175,11 @@ workflow {
     // Step 7: Generate BAM statistics
     samtools_stats( map_reads.out )
     
-    // Final MultiQC report including all BAM statistics
-    multiqc_final_out = multiqc_final(
+    // Create mapping summary instead of problematic MultiQC final step
+    samtools_summary(
         samtools_stats.out
-            .map{ sid, stats, flagstats -> [stats, flagstats] }
-            .flatten()
-            .collect(),
-        Channel.value('final_bam_stats')
+            .map{ sid, stats, flagstats -> stats }
+            .collect()
     )
 
     // Collect all the general stats files using indexed outputs
@@ -194,7 +192,7 @@ workflow {
             multiqc_trim5_out[1],
             multiqc_screen_out[1],
             multiqc_repair_out[1],
-            multiqc_final_out[1]
+            samtools_summary.out       // Add the mapping summary file
         )
         .collect()
     
@@ -229,6 +227,7 @@ include { fastq_screen }      from './modules/fastq_screen.nf'
 include { repair }            from './modules/repair.nf'
 include { map_reads }         from './modules/map_reads.nf'
 include { samtools_stats }    from './modules/samtools_stats.nf'
+include { samtools_summary }  from './modules/samtools_summary.nf'
 include { fetch_genome }      from './modules/fetch_genome.nf'
 include { index_genome }      from './modules/index_genome.nf'
 include { analyze_read_stats } from './modules/analyze_read_stats.nf'
@@ -247,4 +246,3 @@ include { multiqc as multiqc_clumpify } from './modules/multiqc.nf'
 include { multiqc as multiqc_trim5 }    from './modules/multiqc.nf'
 include { multiqc as multiqc_screen }   from './modules/multiqc.nf'
 include { multiqc as multiqc_repair }   from './modules/multiqc.nf'
-include { multiqc as multiqc_final }    from './modules/multiqc.nf'
