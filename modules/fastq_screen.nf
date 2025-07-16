@@ -8,7 +8,7 @@ process fastq_screen {
 
     output:
         tuple val(sample_id), 
-              path("${sample_id}_screen_${read_num}.fq.gz"), 
+              path("${sample_id}_fp1-clmp-fp2-fqscrn.r${read_num}.fq.gz"), 
               path("${sample_id}_R${read_num}_screen.txt"),
               val(read_num)
 
