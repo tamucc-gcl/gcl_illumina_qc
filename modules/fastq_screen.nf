@@ -14,13 +14,24 @@ process fastq_screen {
 
     script:
     """
+    # Count the number of databases in the config file
+    # This counts lines that start with "DATABASE" (case insensitive)
+    DB_COUNT=\$(grep -i "^DATABASE" ${config_file} | wc -l)
+    
+    # Generate filter string with the correct number of zeros
+    FILTER_STRING=\$(printf "%0\${DB_COUNT}d" 0)
+    
+    echo "Found \$DB_COUNT databases in config file"
+    echo "Using filter string: \$FILTER_STRING"
+    
+
     fastq_screen \\
         --aligner bowtie2 \\
         --conf ${config_file} \\
         --threads ${task.cpus ?: 4} \\
         --tag \\
         --force \\
-        --filter 000000000000 \\
+        --filter \${FILTER_STRING} \\
         --subset 0 \\
         ${read}
     
