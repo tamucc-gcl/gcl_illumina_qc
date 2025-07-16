@@ -119,7 +119,13 @@ workflow {
         ]}
         .set { individual_reads }
     
-    fastq_screen( individual_reads, Channel.fromPath(params.decontam_conffile) )
+    // Debug: print the individual reads channel
+    individual_reads.view { "Individual read: $it" }
+    
+    // Create a value channel for the config file (broadcast to all processes)
+    config_ch = Channel.value(file(params.decontam_conffile))
+    
+    fastq_screen( individual_reads, config_ch )
 
     // Group fastq_screen results back together for repair
     fastq_screen.out
