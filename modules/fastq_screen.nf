@@ -4,6 +4,7 @@ process fastq_screen {
 
     input:
         tuple val(sample_id), path(read), val(read_num)
+        path(config_file)
 
     output:
         tuple val(sample_id), 
@@ -15,7 +16,7 @@ process fastq_screen {
     """
     fastq_screen \\
         --aligner bowtie2 \\
-        --conf ${params.decontam_conffile} \\
+        --conf ${config_file} \\
         --threads ${task.cpus ?: 4} \\
         --tag \\
         --force \\

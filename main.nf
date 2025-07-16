@@ -121,7 +121,7 @@ workflow {
         .collate(3)
         .set { individual_reads }
     
-    fastq_screen( individual_reads )
+    fastq_screen( individual_reads, Channel.fromPath(params.decontam_conffile) )
 
     // Group fastq_screen results back together for repair
     fastq_screen.out
