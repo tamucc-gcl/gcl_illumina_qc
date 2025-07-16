@@ -11,8 +11,8 @@ process clumpify {
 
     output:
         tuple val(sample_id),
-              path("${sample_id}_clumped_1.fq.gz"),
-              path("${sample_id}_clumped_2.fq.gz"),
+              path("${sample_id}_fp1-clmp_r1.fq.gz"),
+              path("${sample_id}_fp1-clmp_r2.fq.gz"),
               path("${sample_id}_clumpify_stats.txt")
 
     script:
@@ -21,9 +21,10 @@ process clumpify {
     trap "rm -rf \$temp_dir" EXIT
 
     clumpify.sh \
-        in=${read1} in2=${read2} \
-        out=${sample_id}_clumped_1.fq.gz \
-        out2=${sample_id}_clumped_2.fq.gz \
+        in=${read1} \
+        in2=${read2} \
+        out=${sample_id}_fp1-clmp_r1.fq.gz \
+        out2=${sample_id}_fp1-clmp_r2.fq.gz \
         overwrite=t \
         usetmpdir=t \
         deletetemp=t \
