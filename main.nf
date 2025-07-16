@@ -184,16 +184,17 @@ workflow {
         Channel.value('final_bam_stats')
     )
 
-    // Collect all the general stats files
+    // Collect all the general stats files using indexed outputs
+    // multiqc_*_out[0] = HTML file, multiqc_*_out[1] = stats file
     all_stats = Channel.empty()
         .mix(
-            multiqc_raw_out.map{ html, stats -> stats },
-            multiqc_trim3_out.map{ html, stats -> stats },
-            multiqc_clumpify_out.map{ html, stats -> stats },
-            multiqc_trim5_out.map{ html, stats -> stats },
-            multiqc_screen_out.map{ html, stats -> stats },
-            multiqc_repair_out.map{ html, stats -> stats },
-            multiqc_final_out.map{ html, stats -> stats }
+            multiqc_raw_out[1],        // Get the stats file (index 1)
+            multiqc_trim3_out[1],
+            multiqc_clumpify_out[1],
+            multiqc_trim5_out[1],
+            multiqc_screen_out[1],
+            multiqc_repair_out[1],
+            multiqc_final_out[1]
         )
         .collect()
     
