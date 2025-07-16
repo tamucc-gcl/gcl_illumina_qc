@@ -8,6 +8,7 @@ nextflow.enable.dsl = 2
 //--------------------------------------------------------------------
 params.reads       = "data/fq_raw/*.{1,2}.fq.gz"    // paired‑end,  sampleID.1.fq.gz / .2.fq.gz
 params.accession   = "GCA_042920385.1"              // NCBI assembly accession
+params.conffile    = "/work/birdlab/fastq_screen_databases/runFQSCRN_6_nofish.conf"  // FastQ Screen config file
 params.outdir      = "results"
 
 //--------------------------------------------------------------------
@@ -111,16 +112,35 @@ workflow {
     )
     
     // Step 4: FastQ Screen
-    fastq_screen( fastp_trim_5.out.map{ sid, r1, r2, json, html -> tuple(sid, r1, r2) } )
+    fastp_trim_5.out
+        .map{ sid, r1, r2, json, html -> [
+            [sid, r1, "1"],
+            [sid, r2, "2"]
+        ]}
+        .flatten()
+        .collate(3)
+        .set { individual_reads }
+    
+    fastq_screen( individual_reads )
+
+    // Group fastq_screen results back together for repair
+    fastq_screen.out
+        .groupTuple(by: 0)
+        .map{ sid, reads, reports, read_nums -> 
+            // Sort by read number to ensure R1, R2 order
+            def sorted = [reads, reports, read_nums].transpose().sort{ it[2] }
+            [sid, sorted[0][0], sorted[1][0], sorted[0][1], sorted[1][1]]
+        }
+        .set { screen_paired }
     
     // FastQC after fastq_screen
     fastqc_screen( 
-        fastq_screen.out.map{ sid, r1, r2, txt1, txt2 -> tuple(sid, r1, r2) }
+        screen_paired.map{ sid, r1, r2, txt1, txt2 -> tuple(sid, r1, r2) }
     )
     
     // MultiQC for fastq_screen (screen reports + FastQC)
     multiqc_screen(
-        fastq_screen.out
+        screen_paired
             .map{ sid, r1, r2, txt1, txt2 -> [txt1, txt2] }
             .flatten()
             .mix( 
@@ -133,7 +153,8 @@ workflow {
     )
     
     // Step 5: Repair
-    repair( fastq_screen.out.map{ sid, r1, r2, txt1, txt2 -> tuple(sid, r1, r2) } )
+    repair( screen_paired.map{ sid, r1, r2, txt1, txt2 -> tuple(sid, r1, r2) } )
+    
     
     // FastQC after repair
     fastqc_repair( repair.out )
