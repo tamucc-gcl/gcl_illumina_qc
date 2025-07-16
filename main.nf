@@ -113,12 +113,10 @@ workflow {
     
     // Step 4: FastQ Screen
     fastp_trim_5.out
-        .map{ sid, r1, r2, json, html -> [
+        .flatMap{ sid, r1, r2, json, html -> [
             [sid, r1, "1"],
             [sid, r2, "2"]
         ]}
-        .flatten()
-        .collate(3)
         .set { individual_reads }
     
     fastq_screen( individual_reads, Channel.fromPath(params.decontam_conffile) )
