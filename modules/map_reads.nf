@@ -7,7 +7,7 @@ process map_reads {
         tuple path(genome), val(genome_path), path(index_files)
 
     output:
-        tuple val(sample_id), path("${sample_id}.bam")
+        tuple val(sample_id), path("${sample_id}.bam"), path("${sample_id}.bam.bai")
 
     script:
     """

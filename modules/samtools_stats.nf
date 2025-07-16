@@ -3,7 +3,7 @@ process samtools_stats {
     tag "$sample_id"
 
     input:
-        tuple val(sample_id), path(bam)
+        tuple val(sample_id), path(bam), path(bam_index)
 
     output:
         tuple val(sample_id), path("${sample_id}.stats"), path("${sample_id}.flagstats")
