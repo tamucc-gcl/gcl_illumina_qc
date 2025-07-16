@@ -119,9 +119,6 @@ workflow {
         ]}
         .set { individual_reads }
     
-    // Debug: print the individual reads channel
-    individual_reads.view { "Individual read: $it" }
-    
     // Create a value channel for the config file (broadcast to all processes)
     config_ch = Channel.value(file(params.decontam_conffile))
     

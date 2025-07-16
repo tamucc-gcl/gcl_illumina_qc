@@ -7,8 +7,8 @@ process fastp_trim_5 {
 
     output:
         tuple val(sample_id),
-              path("${sample_id}_fp1-clmp-fp2_r1.fq.gz"),
-              path("${sample_id}_fp1-clmp-fp2_r2.fq.gz"),
+              path("${sample_id}_fp1-clmp-fp2.r1.fq.gz"),
+              path("${sample_id}_fp1-clmp-fp2.r2.fq.gz"),
               path("${sample_id}_trim5_fastp.json"),
               path("${sample_id}_trim5_fastp.html")
 
@@ -17,8 +17,8 @@ process fastp_trim_5 {
     fastp \
         --in1 ${read1} \
         --in2 ${read2} \
-        --out1 ${sample_id}_fp1-clmp-fp2_r1.fq.gz \
-        --out2 ${sample_id}_fp1-clmp-fp2_r2.fq.gz \
+        --out1 ${sample_id}_fp1-clmp-fp2.r1.fq.gz \
+        --out2 ${sample_id}_fp1-clmp-fp2.r2.fq.gz \
         --json ${sample_id}_trim5_fastp.json \
         --html ${sample_id}_trim5_fastp.html \
         --detect_adapter_for_pe \

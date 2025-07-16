@@ -8,7 +8,7 @@ process fastq_screen {
 
     output:
         tuple val(sample_id), 
-              path("${sample_id}_fp1-clmp-fp2-fqscrn_r${read_num}.fq.gz"), 
+              path("${sample_id}_fp1-clmp-fp2-fqscrn.r${read_num}.fq.gz"), 
               path("${sample_id}_R${read_num}_screen.txt"),
               val(read_num)
 
@@ -37,7 +37,7 @@ process fastq_screen {
     
     # Rename output files to match expected naming convention
     # Note: Adjust these mv commands based on actual fastq_screen output naming
-    mv *.tagged.fq.gz ${sample_id}_fp1-clmp-fp2-fqscrn_r${read_num}.fq.gz
+    mv *.tagged.fq.gz ${sample_id}_fp1-clmp-fp2-fqscrn.r${read_num}.fq.gz
     mv *_screen.txt ${sample_id}_R${read_num}_screen.txt
     
     echo "FastQ Screen step completed for ${sample_id} R${read_num}"
