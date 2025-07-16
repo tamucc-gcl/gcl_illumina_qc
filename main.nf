@@ -29,7 +29,7 @@ workflow {
     fastqc_raw( raw_reads_pairs )
 
     // MultiQC for raw FastQC
-    multiqc_raw( 
+    multiqc_raw_out = multiqc_raw( 
         fastqc_raw.out
             .map{ sid, html1, zip1, html2, zip2 -> [html1, zip1, html2, zip2] }
             .flatten()
@@ -55,7 +55,7 @@ workflow {
     )
     
     // MultiQC for 3' trimming (fastp + FastQC)
-    multiqc_trim3(
+    multiqc_trim3_out = multiqc_trim3(
         fastp_trim_3.out
             .map{ sid, r1, r2, json, html -> [json, html] }
             .flatten()
@@ -77,7 +77,7 @@ workflow {
     )
     
     // MultiQC for clumpify (stats + FastQC)
-    multiqc_clumpify(
+    multiqc_clumpify_out = multiqc_clumpify(
         clumpify.out
             .map{ sid, r1, r2, stats -> stats }
             .mix( 
@@ -98,7 +98,7 @@ workflow {
     )
     
     // MultiQC for 5' trimming (fastp + FastQC)
-    multiqc_trim5(
+    multiqc_trim5_out = multiqc_trim5(
         fastp_trim_5.out
             .map{ sid, r1, r2, json, html -> [json, html] }
             .flatten()
@@ -140,7 +140,7 @@ workflow {
     )
     
     // MultiQC for fastq_screen (screen reports + FastQC)
-    multiqc_screen(
+    multiqc_screen_out = multiqc_screen(
         screen_paired
             .map{ sid, r1, r2, txt1, txt2 -> [txt1, txt2] }
             .flatten()
@@ -161,7 +161,7 @@ workflow {
     fastqc_repair( repair.out )
     
     // MultiQC for repair (FastQC only)
-    multiqc_repair(
+    multiqc_repair_out = multiqc_repair(
         fastqc_repair.out
             .map{ sid, html1, zip1, html2, zip2 -> [html1, zip1, html2, zip2] }
             .flatten()
@@ -176,13 +176,30 @@ workflow {
     samtools_stats( map_reads.out )
     
     // Final MultiQC report including all BAM statistics
-    multiqc_final(
+    multiqc_final_out = multiqc_final(
         samtools_stats.out
             .map{ sid, stats, flagstats -> [stats, flagstats] }
             .flatten()
             .collect(),
         Channel.value('final_bam_stats')
     )
+
+    // Collect all the general stats files
+    all_stats = Channel.empty()
+        .mix(
+            multiqc_raw_out.map{ html, stats -> stats },
+            multiqc_trim3_out.map{ html, stats -> stats },
+            multiqc_clumpify_out.map{ html, stats -> stats },
+            multiqc_trim5_out.map{ html, stats -> stats },
+            multiqc_screen_out.map{ html, stats -> stats },
+            multiqc_repair_out.map{ html, stats -> stats },
+            multiqc_final_out.map{ html, stats -> stats }
+        )
+        .collect()
+    
+    // Run R analysis on collected stats
+    analyze_read_stats(all_stats)
+    
 }
 
 //--------------------------------------------------------------------
@@ -213,6 +230,7 @@ include { map_reads }         from './modules/map_reads.nf'
 include { samtools_stats }    from './modules/samtools_stats.nf'
 include { fetch_genome }      from './modules/fetch_genome.nf'
 include { index_genome }      from './modules/index_genome.nf'
+include { analyze_read_stats } from './modules/analyze_read_stats.nf'
 
 include { fastqc_raw }        from './modules/fastqc.nf'
 include { fastqc_generic as fastqc_trim3 }    from './modules/fastqc.nf'
