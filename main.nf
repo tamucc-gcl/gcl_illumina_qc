@@ -175,7 +175,7 @@ workflow prepare_genome {
         index_genome(fetch_genome.out)  // Fixed: use fetch_genome.out instead of fetch_genome.out.genome
         
     emit:
-        genome = index_genome.out[0]  // First output: tuple path(genome), val(genome_path)
+        genome = index_genome.out[0]  // Output: tuple path(genome), val(genome_path), path(index_files)
         index_files = index_genome.out.index_files  // Named output: index files
 }
 

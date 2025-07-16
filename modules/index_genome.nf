@@ -8,7 +8,7 @@ process index_genome {
   tuple path(genome), val(genome_path)
 
   output:
-  tuple path(genome), val(genome_path)
+  tuple path(genome), val(genome_path), path("${genome}.*")
   path("${genome}.*"), emit: index_files
 
   script:
