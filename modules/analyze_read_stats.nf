@@ -27,24 +27,14 @@ process analyze_read_stats {
     #### Libraries ####
     cat("Loading required libraries...\\n")
     
-    # Function to install missing packages
-    install_if_missing <- function(pkg) {
-        if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
-            cat("Installing missing package:", pkg, "\\n")
-            install.packages(pkg, repos = "https://cloud.r-project.org/")
-            library(pkg, character.only = TRUE)
-        }
-    }
-    
     # Initialize flags
     use_multcomp <- FALSE
     
-    # Install and load packages
-    required_packages <- c("tidyverse", "glmmTMB", "emmeans", "broom")
-    
     suppressPackageStartupMessages({
         library(tidyverse)
-        lapply(c("glmmTMB", "emmeans", "broom"), install_if_missing)
+        library(glmmTMB)
+        library(emmeans)
+        library(broom)
         
         # Try to load optional packages
         if (!require(multcomp, quietly = TRUE)) {
