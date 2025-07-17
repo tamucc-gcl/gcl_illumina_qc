@@ -83,9 +83,9 @@ process samtools_summary {
             echo "  properly_paired: \$properly_paired" >> debug_stats.txt
             echo "" >> debug_stats.txt
             
-            # Calculate mapping rate as percentage
+            # Calculate mapping rate as percentage using bc (more reliable than awk)
             if [ "\$total_reads" -gt 0 ] 2>/dev/null; then
-                mapping_rate=\$(awk "BEGIN {printf \"%.2f\", \$mapped_reads * 100 / \$total_reads}")
+                mapping_rate=\$(echo "scale=2; \$mapped_reads * 100 / \$total_reads" | bc -l)
             else
                 mapping_rate="0.00"
             fi
