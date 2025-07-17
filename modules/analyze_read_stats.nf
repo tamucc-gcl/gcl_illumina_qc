@@ -71,22 +71,23 @@ process analyze_read_stats {
     
     # Process the data with explicit namespace calls
     data <- available_files %>%
-        tibble(file = .) %>%
+        tibble(filepath = .) %>%
         dplyr::mutate(stage = case_when(
-            str_detect(file, "raw.*fastqc") ~ "raw",
-            str_detect(file, "trim.*3") ~ "trim3", 
-            str_detect(file, "clumpify") ~ "dedup",
-            str_detect(file, "trim.*5") ~ "trim5",
-            str_detect(file, "fastq.*screen") ~ "fqscrn",
-            str_detect(file, "repair") ~ "repr",
-            str_detect(file, "mapping_summary") ~ "map",
+            str_detect(filepath, "raw.*fastqc") ~ "raw",
+            str_detect(filepath, "trim.*3") ~ "trim3", 
+            str_detect(filepath, "clumpify") ~ "dedup",
+            str_detect(filepath, "trim.*5") ~ "trim5",
+            str_detect(filepath, "fastq.*screen") ~ "fqscrn",
+            str_detect(filepath, "repair") ~ "repr",
+            str_detect(filepath, "mapping_summary") ~ "map",
             TRUE ~ "unknown"
         )) %>%
         # Print stage assignments for debugging
         {
             cat("Stage assignments:\\n")
             for(i in 1:nrow(.)) {
-                cat("File:", .[i,]\\$file, "-> Stage:", .[i,]\\$stage, "\\n")
+                current_row <- .[i,]
+                cat("File:", current_row[["filepath"]], "-> Stage:", current_row[["stage"]], "\\n")
             }
             cat("\\n")
             .
@@ -100,8 +101,9 @@ process analyze_read_stats {
         {
             all_data <- tibble()
             for(i in 1:nrow(.)) {
-                current_file <- .[i,]\\$file
-                current_stage <- .[i,]\\$stage
+                current_row <- .[i,]
+                current_file <- current_row[["filepath"]]
+                current_stage <- current_row[["stage"]]
                 
                 cat("Processing file:", current_file, "as stage:", current_stage, "\\n")
                 
@@ -167,8 +169,8 @@ process analyze_read_stats {
                           str_remove(fixed(".r1")))
     
     cat("Data processing completed\\n")
-    cat("Samples found:", paste(unique(data\\$sample_id), collapse = ", "), "\\n")
-    cat("Stages found:", paste(levels(data\\$stage), collapse = ", "), "\\n")
+    cat("Samples found:", paste(unique(data[["sample_id"]]), collapse = ", "), "\\n")
+    cat("Stages found:", paste(levels(data[["stage"]]), collapse = ", "), "\\n")
     cat("Number of rows:", nrow(data), "\\n\\n")
     
     # Check if we have any data
@@ -217,12 +219,12 @@ process analyze_read_stats {
                 cld(Letters = LETTERS, alpha = 0.05) %>%
                 broom::tidy(conf.int = TRUE) %>%
                 dplyr::mutate(.group = str_trim(.group),
-                       stage = factor(stage, levels = levels(data\\$stage)))
+                       stage = factor(stage, levels = levels(data[["stage"]])))
         } else {
             plot_data <- em_results %>%
                 broom::tidy(conf.int = TRUE) %>%
                 dplyr::mutate(.group = "A",
-                       stage = factor(stage, levels = levels(data\\$stage)))
+                       stage = factor(stage, levels = levels(data[["stage"]])))
         }
         
         # Create the plot
