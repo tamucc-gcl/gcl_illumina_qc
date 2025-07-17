@@ -60,9 +60,11 @@ process analyze_read_stats {
     #### Data Processing ####
     cat("Processing input data files...\\n")
     
-    # List all available files for debugging
+    # List all available files for debugging - using simpler approach
     cat("Available files:\\n")
-    available_files <- list.files(".", pattern = "\\.txt\\$", full.names = TRUE)
+    available_files <- list.files(".", full.names = TRUE)
+    # Filter for .txt files using simple string matching
+    available_files <- available_files[str_ends(available_files, ".txt")]
     cat(paste(available_files, collapse = "\\n"), "\\n\\n")
     
     # Process the data
@@ -102,12 +104,15 @@ process analyze_read_stats {
             }
         }) %>%
         # Filter for R1 files only (except mapping) and clean sample names
-        filter(stage == 'map' | str_detect(sample_id, '\\\\.(r)?1\\$')) %>%
+        # Using simpler string matching to avoid escape issues
+        filter(stage == 'map' | str_ends(sample_id, ".1") | str_ends(sample_id, ".r1")) %>%
         mutate(n_reads = if_else(stage != 'map', 1e6 * n_reads, n_reads) %>%
                        round(0) %>%
                        as.integer(),
-               sample_id = str_remove(sample_id, '_fp1.*r1\\$') %>%
-                          str_remove('\\\\.1\\$'))
+               # Clean sample names using simpler string operations
+               sample_id = str_remove(sample_id, "_fp1.*") %>%
+                          str_remove(fixed(".1")) %>%
+                          str_remove(fixed(".r1")))
     
     cat("Data processing completed\\n")
     cat("Samples found:", paste(unique(data\$sample_id), collapse = ", "), "\\n")
