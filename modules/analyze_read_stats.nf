@@ -36,6 +36,9 @@ process analyze_read_stats {
         library(emmeans)
         library(broom)
         
+        # Re-attach dplyr after other packages to avoid MASS conflicts
+        library(dplyr, warn.conflicts = FALSE)
+        
         # Try to load optional packages
         if (!require(multcomp, quietly = TRUE)) {
             cat("multcomp not available, using basic comparisons\\n")
@@ -60,17 +63,16 @@ process analyze_read_stats {
     #### Data Processing ####
     cat("Processing input data files...\\n")
     
-    # List all available files for debugging - using simpler approach
+    # List all available files
     cat("Available files:\\n")
     available_files <- list.files(".", full.names = TRUE)
-    # Filter for .txt files using simple string matching
     available_files <- available_files[str_ends(available_files, ".txt")]
     cat(paste(available_files, collapse = "\\n"), "\\n\\n")
     
-    # Process the data
+    # Process the data with explicit namespace calls
     data <- available_files %>%
         tibble(file = .) %>%
-        mutate(stage = case_when(
+        dplyr::mutate(stage = case_when(
             str_detect(file, "raw.*fastqc") ~ "raw",
             str_detect(file, "trim.*3") ~ "trim3", 
             str_detect(file, "clumpify") ~ "dedup",
@@ -80,47 +82,112 @@ process analyze_read_stats {
             str_detect(file, "mapping_summary") ~ "map",
             TRUE ~ "unknown"
         )) %>%
-        filter(stage != "unknown") %>%
-        mutate(stage = factor(stage, 
+        # Print stage assignments for debugging
+        {
+            cat("Stage assignments:\\n")
+            for(i in 1:nrow(.)) {
+                cat("File:", .[i,]\\$file, "-> Stage:", .[i,]\\$stage, "\\n")
+            }
+            cat("\\n")
+            .
+        } %>%
+        dplyr::filter(stage != "unknown") %>%
+        dplyr::mutate(stage = factor(stage, 
                             levels = c("raw", "trim3", "dedup", "trim5", 
                                      "fqscrn", "repr", "map"), 
                             ordered = TRUE)) %>%
-        rowwise(stage) %>%
-        reframe({
-            if(stage == "map") {
-                # For mapping summary, read different column
-                read_delim(file, delim = "\\t", 
-                         show_col_types = FALSE, 
-                         na = c("", "NA", "N/A")) %>%
-                select(sample_id = Sample,
-                       n_reads = Mapped_Paired)
-            } else {
-                # For MultiQC files, read fastqc-total_sequences
-                read_delim(file, delim = "\\t", 
-                         show_col_types = FALSE, 
-                         na = c("", "NA", "N/A")) %>%
-                select(sample_id = Sample,
-                       n_reads = matches('fastqc-total_sequences'))
+        # Process each file individually
+        {
+            all_data <- tibble()
+            for(i in 1:nrow(.)) {
+                current_file <- .[i,]\\$file
+                current_stage <- .[i,]\\$stage
+                
+                cat("Processing file:", current_file, "as stage:", current_stage, "\\n")
+                
+                tryCatch({
+                    # Read the file
+                    file_data <- read_delim(current_file, delim = "\\t", 
+                                          show_col_types = FALSE, 
+                                          na = c("", "NA", "N/A"))
+                    
+                    # Print column names for debugging
+                    cat("Columns in", current_file, ":", paste(names(file_data), collapse = ", "), "\\n")
+                    
+                    if(current_stage == "map") {
+                        # For mapping summary - use explicit dplyr:: namespace
+                        processed_data <- file_data %>%
+                            dplyr::select(sample_id = Sample, n_reads = Mapped_Paired) %>%
+                            dplyr::mutate(stage = current_stage)
+                    } else {
+                        # For MultiQC files, look for fastqc total sequences column
+                        fastqc_col <- names(file_data)[str_detect(names(file_data), "fastqc.*total.*sequences")]
+                        
+                        if(length(fastqc_col) == 0) {
+                            # If no fastqc column found, look for other sequence-related columns
+                            fastqc_col <- names(file_data)[str_detect(names(file_data), "sequences|reads")]
+                        }
+                        
+                        if(length(fastqc_col) == 0) {
+                            cat("Warning: No suitable reads column found in", current_file, "\\n")
+                            next
+                        }
+                        
+                        cat("Using reads column:", fastqc_col[1], "for file:", current_file, "\\n")
+                        
+                        processed_data <- file_data %>%
+                            dplyr::select(sample_id = Sample, n_reads = !!fastqc_col[1]) %>%
+                            dplyr::mutate(stage = current_stage)
+                    }
+                    
+                    # Add to combined data
+                    all_data <- dplyr::bind_rows(all_data, processed_data)
+                    
+                }, error = function(e) {
+                    cat("Error processing file:", current_file, "- Error:", conditionMessage(e), "\\n")
+                })
             }
-        }) %>%
+            all_data
+        } %>%
+        # Convert stage back to factor with explicit namespace
+        dplyr::mutate(stage = factor(stage, 
+                            levels = c("raw", "trim3", "dedup", "trim5", 
+                                     "fqscrn", "repr", "map"), 
+                            ordered = TRUE)) %>%
+        # Remove rows with missing data
+        dplyr::filter(!is.na(sample_id), !is.na(n_reads)) %>%
         # Filter for R1 files only (except mapping) and clean sample names
-        # Using simpler string matching to avoid escape issues
-        filter(stage == 'map' | str_ends(sample_id, ".1") | str_ends(sample_id, ".r1")) %>%
-        mutate(n_reads = if_else(stage != 'map', 1e6 * n_reads, n_reads) %>%
+        dplyr::filter(stage == 'map' | str_ends(sample_id, ".1") | str_ends(sample_id, ".r1")) %>%
+        dplyr::mutate(n_reads = if_else(stage != 'map', 1e6 * n_reads, n_reads) %>%
                        round(0) %>%
                        as.integer(),
-               # Clean sample names using simpler string operations
+               # Clean sample names
                sample_id = str_remove(sample_id, "_fp1.*") %>%
                           str_remove(fixed(".1")) %>%
                           str_remove(fixed(".r1")))
     
     cat("Data processing completed\\n")
-    cat("Samples found:", paste(unique(data\$sample_id), collapse = ", "), "\\n")
-    cat("Stages found:", paste(levels(data\$stage), collapse = ", "), "\\n\\n")
+    cat("Samples found:", paste(unique(data\\$sample_id), collapse = ", "), "\\n")
+    cat("Stages found:", paste(levels(data\\$stage), collapse = ", "), "\\n")
+    cat("Number of rows:", nrow(data), "\\n\\n")
+    
+    # Check if we have any data
+    if(nrow(data) == 0) {
+        cat("ERROR: No data found! Check file formats and column names.\\n")
+        writeLines("No data found", "read_counts_summary.txt")
+        writeLines("No data found", "model_summary.txt")
+        
+        png("qc_summary_plot.png", width = 800, height = 600)
+        plot(1, 1, type = "n", main = "No Data Found", xlab = "", ylab = "")
+        text(1, 1, "No data available for plotting", cex = 1.5)
+        dev.off()
+        
+        quit(save = "no", status = 0)
+    }
     
     # Save read counts summary
     data %>%
-        arrange(sample_id, stage) %>%
+        dplyr::arrange(sample_id, stage) %>%
         write_delim("read_counts_summary.txt", delim = "\\t")
     
     #### Model Fitting ####
@@ -148,14 +215,14 @@ process analyze_read_stats {
         if (use_multcomp) {
             plot_data <- em_results %>%
                 cld(Letters = LETTERS, alpha = 0.05) %>%
-                tidy(conf.int = TRUE) %>%
-                mutate(.group = str_trim(.group),
-                       stage = factor(stage, levels = levels(data\$stage)))
+                broom::tidy(conf.int = TRUE) %>%
+                dplyr::mutate(.group = str_trim(.group),
+                       stage = factor(stage, levels = levels(data\\$stage)))
         } else {
             plot_data <- em_results %>%
-                tidy(conf.int = TRUE) %>%
-                mutate(.group = "A",  # Default group when multcomp not available
-                       stage = factor(stage, levels = levels(data\$stage)))
+                broom::tidy(conf.int = TRUE) %>%
+                dplyr::mutate(.group = "A",
+                       stage = factor(stage, levels = levels(data\\$stage)))
         }
         
         # Create the plot
@@ -186,9 +253,7 @@ process analyze_read_stats {
                                                            scales::math_format(10^.x)),
                              trans = scales::log10_trans(),
                              guide = "axis_logticks") +
-            scale_shape_discrete(labels = str_to_sentence) +
-            guides(shape = guide_legend(override.aes = list(size = 5, alpha = 1)),
-                   colour = guide_legend(override.aes = list(size = 5, alpha = 1))) +
+            guides(colour = guide_legend(override.aes = list(size = 5, alpha = 1))) +
             labs(x = 'Processing Stage', 
                  y = 'Number of Reads',
                  colour = 'Sample',
@@ -201,9 +266,9 @@ process analyze_read_stats {
         # Add significance annotations if multcomp is available
         if (use_multcomp) {
             sig_data <- plot_data %>%
-                filter(n_distinct(.group) > 1, .by = stage) %>%
-                distinct(stage) %>%
-                mutate(sig = '*')
+                dplyr::filter(n_distinct(.group) > 1, .by = stage) %>%
+                dplyr::distinct(stage) %>%
+                dplyr::mutate(sig = '*')
             
             if (nrow(sig_data) > 0) {
                 plot <- plot +
@@ -223,27 +288,35 @@ process analyze_read_stats {
         cat("Error in model fitting or plotting:\\n")
         cat(conditionMessage(e), "\\n")
         
-        # Create a simple fallback plot
-        simple_plot <- data %>%
-            ggplot(aes(x = stage, y = n_reads, colour = sample_id, group = sample_id)) +
-            geom_line(linewidth = 1) +
-            geom_point(size = 3) +
-            scale_y_continuous(labels = scales::trans_format("log10",
-                                                           scales::math_format(10^.x)),
-                             trans = scales::log10_trans(),
-                             guide = "axis_logticks") +
-            labs(x = 'Processing Stage', 
-                 y = 'Number of Reads',
-                 colour = 'Sample',
-                 title = 'QC Pipeline Read Retention (Simple Plot)',
-                 subtitle = 'Read counts across processing stages') +
-            theme_classic()
-        
-        ggsave('qc_summary_plot.png',
-               plot = simple_plot,
-               width = 10, height = 8, dpi = 300)
-        
-        cat("Fallback plot created\\n")
+        # Create a simple fallback plot if we have data
+        if(nrow(data) > 0) {
+            simple_plot <- data %>%
+                ggplot(aes(x = stage, y = n_reads, colour = sample_id, group = sample_id)) +
+                geom_line(linewidth = 1) +
+                geom_point(size = 3) +
+                scale_y_continuous(labels = scales::trans_format("log10",
+                                                               scales::math_format(10^.x)),
+                                 trans = scales::log10_trans(),
+                                 guide = "axis_logticks") +
+                labs(x = 'Processing Stage', 
+                     y = 'Number of Reads',
+                     colour = 'Sample',
+                     title = 'QC Pipeline Read Retention (Simple Plot)',
+                     subtitle = 'Read counts across processing stages') +
+                theme_classic()
+            
+            ggsave('qc_summary_plot.png',
+                   plot = simple_plot,
+                   width = 10, height = 8, dpi = 300)
+            
+            cat("Fallback plot created\\n")
+        } else {
+            # Create empty plot
+            png("qc_summary_plot.png", width = 800, height = 600)
+            plot(1, 1, type = "n", main = "Error in Analysis", xlab = "", ylab = "")
+            text(1, 1, "Error occurred during analysis", cex = 1.5)
+            dev.off()
+        }
         
         # Write error details to model summary
         writeLines(c("Model fitting failed:", conditionMessage(e)), "model_summary.txt")
