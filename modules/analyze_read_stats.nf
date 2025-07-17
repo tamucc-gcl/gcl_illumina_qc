@@ -84,7 +84,7 @@ process analyze_read_stats {
     
     # Process all files
     cat("Processing input files...\\n")
-    file_list <- list.files(".", pattern = "\\.txt$", full.names = TRUE)
+    file_list <- list.files(".", pattern = "\\\\.txt\\$", full.names = TRUE)
     file_list <- file_list[!str_detect(file_list, "analysis_log|debug_stats")]
     
     all_data <- map_dfr(file_list, process_file)
@@ -107,8 +107,8 @@ process analyze_read_stats {
             ),
             # Clean sample names
             sample_id = str_remove(sample_id, "_fp1.*") %>%
-                       str_remove("\\.1$") %>%
-                       str_remove("\\.r1$"),
+                       str_remove("\\\\.1\\$") %>%
+                       str_remove("\\\\.r1\\$"),
             # Set stage as ordered factor
             stage = factor(stage, 
                           levels = c("raw", "trim3", "dedup", "trim5", "fqscrn", "repr", "map"), 
