@@ -1,5 +1,5 @@
 # gcl_illumina_qc
-![]()
+![](pipeline_dag.png)
 ## Folder Structure
 ```
 📁 project-root/
