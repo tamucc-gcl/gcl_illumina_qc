@@ -84,7 +84,8 @@ process analyze_read_stats {
     
     # Process all files
     cat("Processing input files...\\n")
-    file_list <- list.files(".", pattern = "\\\\.txt\\$", full.names = TRUE)
+    file_list <- list.files(".", full.names = TRUE)
+    file_list <- file_list[endsWith(file_list, ".txt")]
     file_list <- file_list[!str_detect(file_list, "analysis_log|debug_stats")]
     
     all_data <- map_dfr(file_list, process_file)
@@ -99,16 +100,20 @@ process analyze_read_stats {
     clean_data <- all_data %>%
         # Filter for R1 files only (except mapping)
         filter(stage == "map" | str_ends(sample_id, ".1") | str_ends(sample_id, ".r1")) %>%
-        # Convert read counts
+        # Convert read counts and clean sample names
         mutate(
             n_reads = case_when(
                 stage == "map" ~ as.integer(round(n_reads)),  # Already converted to pairs
                 TRUE ~ as.integer(round(n_reads * 1e6))       # Convert millions to actual count
-            ),
-            # Clean sample names
-            sample_id = str_remove(sample_id, "_fp1.*") %>%
-                       str_remove("\\\\.1\\$") %>%
-                       str_remove("\\\\.r1\\$"),
+            )
+        ) %>%
+        # Clean sample names in separate step to avoid regex issues
+        mutate(
+            sample_id = str_split_i(sample_id, "_fp1", 1),
+            sample_id = str_remove(sample_id, fixed(".1")),
+            sample_id = str_remove(sample_id, fixed(".r1"))
+        ) %>%
+        mutate(
             # Set stage as ordered factor
             stage = factor(stage, 
                           levels = c("raw", "trim3", "dedup", "trim5", "fqscrn", "repr", "map"), 
