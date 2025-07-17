@@ -118,8 +118,9 @@ process analyze_read_stats {
                     
                     if(current_stage == "map") {
                         # For mapping summary - use explicit dplyr:: namespace
+                        # Convert to read pairs from individual reads
                         processed_data <- file_data %>%
-                            dplyr::select(sample_id = Sample, n_reads = Mapped_Paired) %>%
+                            dplyr::select(sample_id = Sample, n_reads = Mapped_Paired / 2) %>%
                             dplyr::mutate(stage = current_stage)
                     } else {
                         # For MultiQC files, look for fastqc total sequences column
