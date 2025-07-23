@@ -5,11 +5,13 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=5
 
+#module load miniconda3
+#source activate nextflow
+module load nextflow/23.10.1
 module load miniconda3
-source activate nextflow
 
 nextflow run gcl_illumina_qc/main.nf \
-    -profile standard \
+    -profile slurm \
     -resume \
     --reads "data/fq_raw/*.{1,2}.fq.gz" \
     --accession "GCA_042920385.1" \
