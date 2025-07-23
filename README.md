@@ -43,3 +43,4 @@ nextflow run gcl_illumina_qc/main.nf \
 	--decontam_conffile "configs/contam_db.conf" \
     --outdir "results"
 ```
+3. Or Run in SLURM `sbatch run_qc.sbatch`
