@@ -14,5 +14,7 @@ process index_genome {
   script:
   """
   bwa-mem2 index ${genome}
+
+  samtools faidx ${genome}
   """
 }
