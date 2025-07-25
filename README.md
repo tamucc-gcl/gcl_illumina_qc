@@ -51,7 +51,7 @@ Clone this repository into a project folder structured like this:
 ├── 📁 data/
 │   ├── 📁 fq_raw/                    # ✅ Must be present (input FASTQ files)
 │   ├── 📁 fq_fp1_clmp_fp2_scrn_rpr/         # 🚀 Created by pipeline
-│   ├── 📁 bam/     							 # 🚀 Created by pipeline
+│   ├── 📁 bam/     					      # 🚀 Created by pipeline
 │   └── ... (other subfolders by step)       # 🚀 Created by pipeline
 ├── 📁 genome/                        # 🚀 Created by pipeline (genome + index)
 ├── 📁 logs/                          # 🚀 Created by pipeline (SLURM + Nextflow logs)
