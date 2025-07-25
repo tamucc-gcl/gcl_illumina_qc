@@ -66,12 +66,8 @@ Clone this repository into a project folder structured like this:
 ### Option 1: Local/Interactive Run
 
 ```bash
-# Load environment and activate nextflow
-module load miniconda3
-source activate nextflow
-
-# Run pipeline with example inputs
-nextflow run gcl_illumina_qc/main.nf     -profile standard     -resume     --reads "data/fq_raw/*.{1,2}.fq.gz"     --accession "GCA_042920385.1"     --decontam_conffile "configs/contam_db.conf"     --outdir "results"
+# Run pipeline locally
+nextflow run gcl_illumina_qc/main.nf     -profile local     -resume     --reads "data/fq_raw/*.{1,2}.fq.gz"     --accession "GCA_042920385.1"     --decontam_conffile "configs/contam_db.conf"     --outdir "results"
 
 # Optional: visualize DAG
 nextflow run gcl_illumina_qc/main.nf -with-dag flowchart.dot
