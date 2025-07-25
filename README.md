@@ -86,6 +86,7 @@ sbatch run_qc.sbatch
 
 Edit `gcl_illumina_qc/run_qc.sbatch` to customize resources used by orchestra conductor job (e.g., CPUs, memory, partition).
 Edit `gcl_illumina_qc/nextflow.config` to customize resources used by each QC stage (e.g., CPUs, memory, partition).
+
 ---
 
 ## 📊 Post-Pipeline QC Analysis
