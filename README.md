@@ -77,7 +77,7 @@ dot -Tpng flowchart.dot -o flowchart.png
 ### Option 2: SLURM Submission
 
 ```bash
-sbatch run_qc.sbatch
+sbatch run_qc.sbatch GCA_042920385.1
 ```
 
 Edit `gcl_illumina_qc/run_qc.sbatch` to customize resources used by orchestra conductor job (e.g., CPUs, memory, partition).
