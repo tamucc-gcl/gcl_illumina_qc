@@ -8,6 +8,7 @@ process clumpify {
               path(read2), 
               path(json),   // fastp report (ignored)
               path(html)    // fastp report (ignored)
+        val(sequencing_type)
 
     output:
         tuple val(sample_id),
@@ -16,6 +17,11 @@ process clumpify {
               path("${sample_id}_clumpify_stats.txt")
 
     script:
+    // Set parameters based on sequencing type
+    def subs_param = sequencing_type == 'ddrad' ? 'subs=0' : 'subs=2'
+    def containment_param = sequencing_type == 'ddrad' ? 'containment=f' : 'containment=t'
+    def optical_param = sequencing_type == 'ddrad' ? 'optical=t' : 'optical=f'
+
     """
     temp_dir=\$(mktemp -d)
     trap "rm -rf \$temp_dir" EXIT
@@ -29,9 +35,11 @@ process clumpify {
         usetmpdir=t \
         deletetemp=t \
         dedupe=t \
+        ${optical_param} \
+        dupedist=12000 \
         addcount=t \
-        subs=2 \
-        containment=t \
+        ${subs_param} \
+        ${containment_param} \
         consensus=f \
         2>&1 | tee ${sample_id}_clumpify_stats.txt
     """

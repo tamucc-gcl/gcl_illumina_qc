@@ -9,6 +9,7 @@ nextflow.enable.dsl = 2
 params.reads       = "data/fq_raw/*.{1,2}.fq.gz"    // paired‑end,  sampleID.1.fq.gz / .2.fq.gz
 params.accession   = "GCA_042920385.1"              // NCBI assembly accession
 params.decontam_conffile    = "/work/birdlab/fastq_screen_databases/example_fastq-screen.conf"  // FastQ Screen config file
+params.sequencing_type = "whole_genome"  // Options: "ddrad" or "whole_genome"
 params.outdir      = "results"
 
 //--------------------------------------------------------------------
@@ -69,7 +70,8 @@ workflow {
     )
     
     // Step 2: Clumpify
-    clumpify( fastp_trim_3.out )
+    clumpify( fastp_trim_3.out,
+              Channel.value(params.sequencing_type))
     
     // FastQC after clumpify
     fastqc_clumpify( 
