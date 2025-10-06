@@ -1,5 +1,6 @@
 // main.nf – GCL Illumina QC pipeline
-// July 2025 — consolidated MultiQC per step
+// July 2025 – consolidated MultiQC per step
+// Oct 2025 - implement local genome option
 
 nextflow.enable.dsl = 2
 
@@ -7,7 +8,8 @@ nextflow.enable.dsl = 2
 // USER PARAMETERS
 //--------------------------------------------------------------------
 params.reads       = "data/fq_raw/*.{1,2}.fq.gz"    // paired‑end,  sampleID.1.fq.gz / .2.fq.gz
-params.accession   = "GCA_042920385.1"              // NCBI assembly accession
+params.accession   = null                            // NCBI assembly accession (optional)
+params.genome      = null                            // Path to local genome file (optional)
 params.decontam_conffile    = "/work/birdlab/fastq_screen_databases/example_fastq-screen.conf"  // FastQ Screen config file
 params.sequencing_type = "whole_genome"  // Options: "ddrad" or "whole_genome"
 params.outdir      = "results"
@@ -16,6 +18,13 @@ params.outdir      = "results"
 // WORKFLOW DEFINITION
 //--------------------------------------------------------------------
 workflow {
+    // Validate genome input parameters
+    if (!params.genome && !params.accession) {
+        error "Error: Either --genome (local file) or --accession (NCBI) must be specified"
+    }
+    if (params.genome && params.accession) {
+        log.warn "Warning: Both --genome and --accession specified. Using local genome: ${params.genome}"
+    }
 
     //----------------------------------------------------------------
     // 1. RAW READ INPUT
@@ -39,9 +48,18 @@ workflow {
     )
 
     //----------------------------------------------------------------
-    // 3. GENOME PREP  (download ➜ index)
+    // 3. GENOME PREP  (download ➜ index OR local ➜ index)
     //----------------------------------------------------------------
-    prepare_genome( Channel.value( params.accession ) )
+    if (params.genome) {
+        // Use local genome file
+        genome_file = file(params.genome, checkIfExists: true)
+        prepare_genome_local( Channel.value(genome_file) )
+        genome_indexed = prepare_genome_local.out.genome
+    } else {
+        // Download genome from NCBI
+        prepare_genome( Channel.value( params.accession ) )
+        genome_indexed = prepare_genome.out.genome
+    }
 
     //----------------------------------------------------------------
     // 4. QC PIPELINE STEPS
@@ -171,8 +189,8 @@ workflow {
         Channel.value('repair')
     )
     
-    // Step 6: Map reads to genome
-    map_reads( repair.out, prepare_genome.out.genome )
+    // Step 6: Map reads to genome (use the indexed genome from either path)
+    map_reads( repair.out, genome_indexed )
     
     // Step 7: Generate BAM statistics
     samtools_stats( map_reads.out )
@@ -204,7 +222,7 @@ workflow {
 }
 
 //--------------------------------------------------------------------
-// SUB‑WORKFLOW: fetch + index genome
+// SUB‑WORKFLOW: fetch + index genome (from NCBI)
 //--------------------------------------------------------------------
 workflow prepare_genome {
     take:
@@ -212,7 +230,24 @@ workflow prepare_genome {
     
     main:
         fetch_genome(accession)
-        index_genome(fetch_genome.out)  // Fixed: use fetch_genome.out instead of fetch_genome.out.genome
+        index_genome(fetch_genome.out)  
+        
+    emit:
+        genome = index_genome.out[0]  // Output: tuple path(genome), val(genome_path), path(index_files)
+        index_files = index_genome.out.index_files  // Named output: index files
+}
+
+//--------------------------------------------------------------------
+// SUB‑WORKFLOW: prepare local genome (copy + index)
+//--------------------------------------------------------------------
+workflow prepare_genome_local {
+    take:
+        genome_file
+    
+    main:
+        // Create a process to stage the local genome file
+        stage_local_genome(genome_file)
+        index_genome(stage_local_genome.out)
         
     emit:
         genome = index_genome.out[0]  // Output: tuple path(genome), val(genome_path), path(index_files)
@@ -232,6 +267,7 @@ include { samtools_stats }    from './modules/samtools_stats.nf'
 include { samtools_summary }  from './modules/samtools_summary.nf'
 include { fetch_genome }      from './modules/fetch_genome.nf'
 include { index_genome }      from './modules/index_genome.nf'
+include { stage_local_genome } from './modules/stage_local_genome.nf'
 include { analyze_read_stats } from './modules/analyze_read_stats.nf'
 
 include { fastqc_raw }        from './modules/fastqc.nf'
