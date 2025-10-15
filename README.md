@@ -63,26 +63,88 @@ Clone this repository into a project folder structured like this:
 
 ## 🚀 Running the Pipeline
 
+The pipeline accepts reference genomes in two ways:
+- **Local genome file** – Use `--genome` to specify a path to a FASTA file on your system
+- **NCBI download** – Use `--accession` to automatically download from NCBI
+
 ### Option 1: Local/Interactive Run
 
+#### Using a local genome file:
 ```bash
-# Run pipeline locally
-nextflow run gcl_illumina_qc/main.nf     -profile local     -resume     --reads "data/fq_raw/*.{1,2}.fq.gz"     --accession "GCA_042920385.1"     --decontam_conffile "configs/contam_db.conf"     --outdir "results"
+# Run pipeline with local genome
+nextflow run gcl_illumina_qc/main.nf \
+    -profile local \
+    -resume \
+    --reads "data/fq_raw/*.{1,2}.fq.gz" \
+    --genome "/path/to/reference/genome.fasta" \
+    --sequencing_type "whole_genome" \
+    --decontam_conffile "configs/contam_db.conf" \
+    --outdir "results"
+```
 
-# Optional: visualize DAG
+#### Using NCBI accession:
+```bash
+# Run pipeline with NCBI genome download
+nextflow run gcl_illumina_qc/main.nf \
+    -profile local \
+    -resume \
+    --reads "data/fq_raw/*.{1,2}.fq.gz" \
+    --accession "GCA_042920385.1" \
+    --sequencing_type "whole_genome" \
+    --decontam_conffile "configs/contam_db.conf" \
+    --outdir "results"
+```
+
+#### Optional: Visualize DAG
+```bash
 nextflow run gcl_illumina_qc/main.nf -with-dag flowchart.dot
 dot -Tpng flowchart.dot -o flowchart.png
 ```
 
 ### Option 2: SLURM Submission
 
+The `run_qc.sbatch` script automatically detects whether you're providing a local genome file or an NCBI accession:
+
+#### Using a local genome file:
 ```bash
-sbatch run_qc.sbatch GCA_042920385.1
+# Automatically detects file and uses --genome parameter
+sbatch run_qc.sbatch /path/to/genome.fasta ddrad configs/contam_db.conf
+sbatch run_qc.sbatch ./references/my_species.fa whole_genome configs/contam_db.conf
+```
+
+#### Using NCBI accession:
+```bash
+# Automatically detects accession pattern and uses --accession parameter
+sbatch run_qc.sbatch GCA_042920385.1 whole_genome configs/contam_db.conf
+sbatch run_qc.sbatch GCF_000001405.40 ddrad configs/contam_db.conf
 ```
 
 Edit `gcl_illumina_qc/run_qc.sbatch` to customize resources used by orchestra conductor job (e.g., CPUs, memory, partition).
 
 Edit `gcl_illumina_qc/nextflow.config` to customize resources used by each QC stage (e.g., CPUs, memory, partition).
+
+### 📝 Parameter Reference
+
+| Parameter | Description | Required | Example |
+|-----------|-------------|----------|---------|
+| `--reads` | Input paired-end FASTQ files | ✅ Yes | `"data/fq_raw/*.{1,2}.fq.gz"` |
+| `--genome` | Path to local genome FASTA file | ⚠️ One required | `/path/to/genome.fa` |
+| `--accession` | NCBI assembly accession | ⚠️ One required | `GCA_042920385.1` |
+| `--sequencing_type` | Library type | 🔧 Optional | `ddrad` or `whole_genome` |
+| `--decontam_conffile` | FastQ Screen config | ✅ Yes | `configs/contam_db.conf` |
+| `--outdir` | Output directory | 🔧 Optional | `results` |
+
+**Note:** Either `--genome` OR `--accession` must be specified, but not both.
+
+### 🧬 Supported Genome Formats
+
+When using local genome files (`--genome`), the following formats are supported:
+- `.fa` – FASTA format
+- `.fasta` – FASTA format  
+- `.fna` – FASTA nucleotide format
+- `.fa.gz` – Gzipped FASTA
+- `.fasta.gz` – Gzipped FASTA
+- `.fna.gz` – Gzipped FASTA nucleotide
 
 ---
 
