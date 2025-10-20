@@ -1,5 +1,4 @@
-# Generate the markdown report
-markdown_contentprocess generate_report {
+process generate_report {
     label 'generate_report'
     tag "final_report"
     
@@ -10,8 +9,6 @@ markdown_contentprocess generate_report {
         path read_summary
         path multiqc_reports
         val genome_source
-        path initial_histogram
-        path mapped_histogram
         path initial_histogram
         path mapped_histogram
         
@@ -30,10 +27,6 @@ import os
 import subprocess
 import math
 from pathlib import Path
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
-import matplotlib.pyplot as plt
-import numpy as np
 
 # Parse genome source
 genome_source = "${genome_source}"
@@ -78,7 +71,7 @@ if genome_source.startswith("accession:"):
 elif genome_source.startswith("local:"):
     genome_path = genome_source.replace("local:", "")
     species_name = ""  # Leave blank for local genomes
-    reference_line = f"Reference genome used: Local file - `{genome_path}`"
+    reference_line = f"Reference genome used: Local file - \`{genome_path}\`"
 else:
     species_name = "Unknown"
     reference_line = "Reference genome used: Unknown source"
@@ -172,35 +165,6 @@ try:
                 pp_stats["min"] = min(properly_paired)
                 pp_stats["max"] = max(properly_paired)
                 pp_stats["n"] = len(properly_paired)
-            
-            # Create histograms
-            if raw_reads and final_reads:
-                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-                
-                # Initial reads histogram
-                ax1.hist(raw_reads, bins=min(20, len(set(raw_reads))), edgecolor='black', color='skyblue')
-                ax1.set_xlabel('Number of Read Pairs')
-                ax1.set_ylabel('Number of Samples')
-                ax1.set_title(f'Initial Read Distribution (n={len(raw_reads)})')
-                ax1.axvline(initial_stats["mean"], color='red', linestyle='--', label=f'Mean: {initial_stats["mean"]:,.0f}')
-                ax1.legend()
-                ax1.grid(True, alpha=0.3)
-                
-                # Final reads histogram
-                ax2.hist(final_reads, bins=min(20, len(set(final_reads))), edgecolor='black', color='lightgreen')
-                ax2.set_xlabel('Number of Read Pairs')
-                ax2.set_ylabel('Number of Samples')
-                ax2.set_title(f'Final Read Distribution (n={len(final_reads)})')
-                ax2.axvline(final_stats["mean"], color='red', linestyle='--', label=f'Mean: {final_stats["mean"]:,.0f}')
-                ax2.legend()
-                ax2.grid(True, alpha=0.3)
-                
-                plt.tight_layout()
-                plt.savefig('read_distribution_histograms.png', dpi=150, bbox_inches='tight')
-                plt.close()
-                print("Created read distribution histograms")
-            else:
-                print("Insufficient data for histograms")
                 
 except Exception as e:
     print(f"Could not read statistics from read summary: {e}")
