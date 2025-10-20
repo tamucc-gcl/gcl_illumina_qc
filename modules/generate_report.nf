@@ -238,7 +238,7 @@ markdown_content = f'''# GCL Illumina QC Pipeline Report
 ### Read Retention Through QC Pipeline
 ![QC Summary Plot](${params.outdir}/read_analysis/qc_summary_plot.png)
 
-### MultiQC Reports
+### MultiQC Reports (download locally to view)
 {chr(10).join(multiqc_links) if multiqc_links else "No MultiQC reports found"}
 
 ### Stage-by-Stage Comparison
