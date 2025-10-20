@@ -66,9 +66,9 @@ process analyze_read_stats {
             # Use backtick notation to avoid Nextflow variable interpretation
             result <- data %>%
                 select(sample_id = `Sample`, `Mapped_Paired`, `Properly_Paired`) %>%
-                pivot_longer(cols = ends_with('Paired),
-                             names_to = 'stage',
-                             values_to = 'n_reads') %>% 
+                pivot_longer(cols = ends_with("Paired"),
+                             names_to = "stage",
+                             values_to = "n_reads") %>% 
                 mutate(
                     n_reads = n_reads / 2,  # Convert to read pairs
                     stage = case_when(stage == "Mapped_Paired" ~ "map",
@@ -122,7 +122,7 @@ process analyze_read_stats {
     cat("\\nCleaning data...\\n")
     clean_data <- all_data %>%
         # Filter for R1 files only (except mapping)
-        filter(stage == "map" | str_ends(sample_id, ".1") | str_ends(sample_id, ".r1") | str_ends(sample_id, "_R1")) %>%
+        filter(stage %in% c("map", "pp") | str_ends(sample_id, ".1") | str_ends(sample_id, ".r1") | str_ends(sample_id, "_R1")) %>%
         # Convert read counts and clean sample names
         mutate(
             n_reads = case_when(
