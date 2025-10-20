@@ -229,6 +229,34 @@ workflow {
     // Run R analysis on collected stats
     analyze_read_stats(all_stats)
     
+    //----------------------------------------------------------------
+    // 8. GENERATE FINAL REPORT
+    //----------------------------------------------------------------
+    
+    // Prepare genome source information
+    genome_source = params.genome 
+        ? Channel.value("local:${params.genome}")
+        : Channel.value("accession:${params.accession}")
+    
+    // Collect all MultiQC HTML reports
+    all_multiqc_reports = Channel.empty()
+        .mix(
+            multiqc_raw_out[0],
+            multiqc_trim3_out[0],
+            multiqc_clumpify_out[0],
+            multiqc_trim5_out[0],
+            multiqc_screen_out[0],
+            multiqc_repair_out[0]
+        )
+        .collect()
+    
+    // Generate final report
+    generate_report(
+        analyze_read_stats.out[0],  // qc_summary_plot.png
+        analyze_read_stats.out[1],  // read_counts_summary.txt
+        all_multiqc_reports,
+        genome_source
+    )
 }
 
 //--------------------------------------------------------------------
@@ -279,6 +307,7 @@ include { fetch_genome }      from './modules/fetch_genome.nf'
 include { index_genome }      from './modules/index_genome.nf'
 include { stage_local_genome } from './modules/stage_local_genome.nf'
 include { analyze_read_stats } from './modules/analyze_read_stats.nf'
+include { generate_report } from './modules/generate_report.nf'
 
 include { fastqc_raw }        from './modules/fastqc.nf'
 include { fastqc_generic as fastqc_trim3 }    from './modules/fastqc.nf'
