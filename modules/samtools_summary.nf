@@ -3,8 +3,6 @@ process samtools_summary {
     label 'samtools_summary'
     tag "mapping_summary"
     
-    publishDir "${params.outdir}", mode: 'copy'
-    
     input:
         path(stats_files)
     
