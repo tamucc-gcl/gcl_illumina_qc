@@ -14,6 +14,8 @@ process analyze_read_stats {
         path("model_summary.txt")
         path("analysis_log.txt")
         path("stage_comparison.txt")
+        path("initial_reads_histogram.png")
+        path("mapped_reads_histogram.png")
     
     script:
     """
