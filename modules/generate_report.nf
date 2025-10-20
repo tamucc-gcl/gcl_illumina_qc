@@ -9,7 +9,7 @@ process generate_report {
         path(qc_plot)
         path(read_summary)
         path(multiqc_reports)
-        val(genome_source)  // Either "accession:GCA_xxx" or "local:/path/to/genome"
+        val(genome_source)
         
     output:
         path("pipeline_report.md")
@@ -69,7 +69,7 @@ if genome_source.startswith("accession:"):
 elif genome_source.startswith("local:"):
     genome_path = genome_source.replace("local:", "")
     species_name = ""  # Leave blank for local genomes
-    reference_line = f"Reference genome used: Local file - `{genome_path}`"
+    reference_line = f"Reference genome used: Local file - \\`{genome_path}\\`"
 else:
     species_name = "Unknown"
     reference_line = "Reference genome used: Unknown source"
@@ -242,12 +242,11 @@ See [stage_comparison.txt](${params.outdir}/read_analysis/stage_comparison.txt) 
 - Min reads: {fmt_num(final_stats["min"])}
 - Max reads: {fmt_num(final_stats["max"])}
 
-{"### Properly Paired Reads" if pp_stats["n"] > 0 else ""}
-{f"""**Summary Statistics (n={pp_stats["n"]} samples):**
+{("### Properly Paired Reads" + chr(10) + f"""**Summary Statistics (n={pp_stats["n"]} samples):**
 - Mean reads: {fmt_num(pp_stats["mean"])}
 - Standard deviation: {fmt_num(pp_stats["sd"])}
 - Min reads: {fmt_num(pp_stats["min"])}
-- Max reads: {fmt_num(pp_stats["max"])}""" if pp_stats["n"] > 0 else ""}
+- Max reads: {fmt_num(pp_stats["max"])}""") if pp_stats["n"] > 0 else ""}
 
 ### Final Mapping Statistics
 See [final_qc_readCounts.txt](${params.outdir}/final_qc_readCounts.txt) for detailed mapping statistics per sample.
