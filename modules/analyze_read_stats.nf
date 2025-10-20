@@ -15,7 +15,6 @@ process analyze_read_stats {
         path("analysis_log.txt")
         path("stage_comparison.txt")
         path("sample_trajectories.png")
-        path("debug_all_data.txt")
     
     script:
     """
@@ -111,7 +110,7 @@ process analyze_read_stats {
     cat("Found", length(file_list), "input files\\n")
     
     all_data <- map_dfr(file_list, process_file)
-    write_delim(all_data, "debug_all_data.txt", delim = "\\t")
+    #write_delim(all_data, "debug_all_data.txt", delim = "\\t") #to use add to publish dir
 
     if (is.null(all_data) || nrow(all_data) == 0) {
         cat("ERROR: No data processed\\n")
@@ -155,6 +154,8 @@ process analyze_read_stats {
     # Save summary
     clean_data %>%
         arrange(sample_id, stage) %>%
+        select(sample_id, stage, n_reads) %>%
+        pivot_wider(names_from = stage, values_from = n_reads) %>%
         write_delim("read_counts_summary.txt", delim = "\\t")
     
     # Calculate stage-to-stage retention rates
