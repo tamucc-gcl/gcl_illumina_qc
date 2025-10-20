@@ -3,10 +3,7 @@ process samtools_summary {
     label 'samtools_summary'
     tag "mapping_summary"
     
-    publishDir "${params.outdir}", mode: 'copy', saveAs: { filename ->
-        if (filename == "mapping_summary.txt") return "final_qc_readCounts.txt"
-        return filename
-    }
+    publishDir "${params.outdir}", mode: 'copy'
     
     input:
         path(stats_files)

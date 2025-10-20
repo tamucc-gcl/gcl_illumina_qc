@@ -15,6 +15,7 @@ process analyze_read_stats {
         path("analysis_log.txt")
         path("stage_comparison.txt")
         path("sample_trajectories.png")
+        path("debug_all_data.txt")
     
     script:
     """
@@ -64,10 +65,14 @@ process analyze_read_stats {
             # Mapping data: convert individual reads to read pairs
             # Use backtick notation to avoid Nextflow variable interpretation
             result <- data %>%
-                select(sample_id = `Sample`, n_reads = `Mapped_Paired`) %>%
+                select(sample_id = `Sample`, `Mapped_Paired`, `Properly_Paired`) %>%
+                pivot_longer(cols = ends_with('Paired),
+                             names_to = 'stage',
+                             values_to = 'n_reads') %>% 
                 mutate(
                     n_reads = n_reads / 2,  # Convert to read pairs
-                    stage = stage
+                    stage = case_when(stage == "Mapped_Paired" ~ "map",
+                                      stage == "Properly_Paired" ~ "pp")
                 )
             cat("  Mapping data - converted to read pairs\\n")
             
@@ -106,7 +111,8 @@ process analyze_read_stats {
     cat("Found", length(file_list), "input files\\n")
     
     all_data <- map_dfr(file_list, process_file)
-    
+    write_delim(all_data, "debug_all_data.txt", delim = "\\t")
+
     if (is.null(all_data) || nrow(all_data) == 0) {
         cat("ERROR: No data processed\\n")
         quit(save = "no", status = 1)
@@ -120,7 +126,7 @@ process analyze_read_stats {
         # Convert read counts and clean sample names
         mutate(
             n_reads = case_when(
-                stage == "map" ~ as.integer(round(n_reads)),  # Already converted to pairs
+                stage %in% c("map", "pp") ~ as.integer(round(n_reads)),  # Already converted to pairs
                 TRUE ~ as.integer(round(n_reads * 1e6))       # Convert millions to actual count
             )
         ) %>%
@@ -134,7 +140,7 @@ process analyze_read_stats {
         mutate(
             # Set stage as ordered factor
             stage = factor(stage, 
-                          levels = c("raw", "trim3", "dedup", "trim5", "fqscrn", "repr", "map"), 
+                          levels = c("raw", "trim3", "dedup", "trim5", "fqscrn", "repr", "map", "pp"), 
                           ordered = TRUE)
         ) %>%
         # Remove any rows with missing data
