@@ -1,4 +1,3 @@
-// modules/generate_report.nf
 process generate_report {
     label 'generate_report'
     tag "final_report"
@@ -6,17 +5,18 @@ process generate_report {
     publishDir "${params.outdir}", mode: 'copy'
     
     input:
-        path(qc_plot)
-        path(read_summary)
-        path(multiqc_reports)
-        val(genome_source)
+        path qc_plot
+        path read_summary
+        path multiqc_reports
+        val genome_source
         
     output:
-        path("pipeline_report.md")
-        path("pipeline_report.html")
+        path "pipeline_report.md"
+        path "pipeline_report.html"
     
     script:
     """
+    cat <<'PYEOF' > generate_report.py
 #!/usr/bin/env python3
 
 import re
@@ -69,7 +69,7 @@ if genome_source.startswith("accession:"):
 elif genome_source.startswith("local:"):
     genome_path = genome_source.replace("local:", "")
     species_name = ""  # Leave blank for local genomes
-    reference_line = f"Reference genome used: Local file - \\`{genome_path}\\`"
+    reference_line = f"Reference genome used: Local file - \`{genome_path}\`"
 else:
     species_name = "Unknown"
     reference_line = "Reference genome used: Unknown source"
@@ -204,6 +204,16 @@ for mqc_file in sorted_multiqc:
 def fmt_num(n):
     return f"{n:,.0f}"
 
+# Generate properly paired section
+pp_section = ""
+if pp_stats["n"] > 0:
+    pp_section = f"""### Properly Paired Reads
+**Summary Statistics (n={pp_stats["n"]} samples):**
+- Mean reads: {fmt_num(pp_stats["mean"])}
+- Standard deviation: {fmt_num(pp_stats["sd"])}
+- Min reads: {fmt_num(pp_stats["min"])}
+- Max reads: {fmt_num(pp_stats["max"])}"""
+
 # Generate the markdown report
 markdown_content = f'''# GCL Illumina QC Pipeline Report
 
@@ -242,11 +252,7 @@ See [stage_comparison.txt](${params.outdir}/read_analysis/stage_comparison.txt) 
 - Min reads: {fmt_num(final_stats["min"])}
 - Max reads: {fmt_num(final_stats["max"])}
 
-{("### Properly Paired Reads" + chr(10) + f"""**Summary Statistics (n={pp_stats["n"]} samples):**
-- Mean reads: {fmt_num(pp_stats["mean"])}
-- Standard deviation: {fmt_num(pp_stats["sd"])}
-- Min reads: {fmt_num(pp_stats["min"])}
-- Max reads: {fmt_num(pp_stats["max"])}""") if pp_stats["n"] > 0 else ""}
+{pp_section}
 
 ### Final Mapping Statistics
 See [final_qc_readCounts.txt](${params.outdir}/final_qc_readCounts.txt) for detailed mapping statistics per sample.
@@ -288,5 +294,8 @@ except:
     with open("pipeline_report.html", 'w') as f:
         f.write(html_content)
     print("Basic HTML report generated (pandoc not available)")
+PYEOF
+
+    python3 generate_report.py
     """
 }
