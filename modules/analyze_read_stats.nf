@@ -355,8 +355,12 @@ process analyze_read_stats {
         annotate("text", x = raw_median, y = y_limit * 0.85, 
                  label = paste0("Median: ", scales::comma(round(raw_median))),
                  color = "blue", hjust = -0.1, size = 3.5) +
-        scale_x_continuous(labels = scales::comma, limits = x_limits) +
         scale_y_continuous(limits = c(0, y_limit)) +
+        scale_x_log10(
+            limits = x_limits,
+            labels = trans_format("log10", math_format(10^.x)),
+            breaks = trans_breaks("log10", function(x) 10^x)
+        ) +
         labs(
             title = "Initial Read Distribution",
             subtitle = paste0("Raw reads before QC (n = ", nrow(raw_data), " samples)"),
@@ -385,8 +389,12 @@ process analyze_read_stats {
         annotate("text", x = mapped_median, y = y_limit * 0.85, 
                  label = paste0("Median: ", scales::comma(round(mapped_median))),
                  color = "blue", hjust = -0.1, size = 3.5) +
-        scale_x_continuous(labels = scales::comma, limits = x_limits) +
         scale_y_continuous(limits = c(0, y_limit)) +
+        scale_x_log10(
+            limits = x_limits,
+            labels = trans_format("log10", math_format(10^.x)),
+            breaks = trans_breaks("log10", function(x) 10^x)
+        ) +
         labs(
             title = "Mapped Read Distribution",
             subtitle = paste0("Reads after QC and mapping (n = ", nrow(mapped_data), " samples)"),
