@@ -204,7 +204,7 @@ workflow {
         Channel.value('mapping')
     )
 
-    // Create mapping summary instead of problematic MultiQC final step
+    // Create mapping summary
     samtools_summary(
         samtools_stats.out
             .map{ sid, stats, flagstats -> stats }
