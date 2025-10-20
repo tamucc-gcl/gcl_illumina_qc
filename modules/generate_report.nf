@@ -71,7 +71,7 @@ if genome_source.startswith("accession:"):
 elif genome_source.startswith("local:"):
     genome_path = genome_source.replace("local:", "")
     species_name = ""  # Leave blank for local genomes
-    reference_line = f"Reference genome used: Local file - \`{genome_path}\`"
+    reference_line = f"Reference genome used: Local file - `{genome_path}`"
 else:
     species_name = "Unknown"
     reference_line = "Reference genome used: Unknown source"
