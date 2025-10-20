@@ -207,12 +207,12 @@ def fmt_num(n):
 # Generate properly paired section
 pp_section = ""
 if pp_stats["n"] > 0:
-    pp_section = f"""### Properly Paired Reads
-**Summary Statistics (n={pp_stats["n"]} samples):**
-- Mean reads: {fmt_num(pp_stats["mean"])}
-- Standard deviation: {fmt_num(pp_stats["sd"])}
-- Min reads: {fmt_num(pp_stats["min"])}
-- Max reads: {fmt_num(pp_stats["max"])}"""
+    pp_section = "### Properly Paired Reads\\n"
+    pp_section += f"**Summary Statistics (n={pp_stats['n']} samples):**\\n"
+    pp_section += f"- Mean reads: {fmt_num(pp_stats['mean'])}\\n"
+    pp_section += f"- Standard deviation: {fmt_num(pp_stats['sd'])}\\n"
+    pp_section += f"- Min reads: {fmt_num(pp_stats['min'])}\\n"
+    pp_section += f"- Max reads: {fmt_num(pp_stats['max'])}"
 
 # Generate the markdown report
 markdown_content = f'''# GCL Illumina QC Pipeline Report
