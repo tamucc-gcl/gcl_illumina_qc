@@ -327,22 +327,22 @@ process analyze_read_stats {
         select(sample_id, n_reads)
     
     # Calculate combined axis limits for consistent scaling
-    all_reads <- c(raw_data$n_reads, mapped_data$n_reads)
+    all_reads <- c(raw_data[["n_reads"]], mapped_data[["n_reads"]])
     x_limits <- c(min(all_reads) * 0.9, max(all_reads) * 1.1)
     
     # Determine appropriate number of bins (same for both)
     n_bins <- min(20, length(unique(all_reads)) / 2)
     
     # Calculate y-axis limit based on max frequency
-    raw_hist_data <- hist(raw_data$n_reads, breaks = n_bins, plot = FALSE)
-    mapped_hist_data <- hist(mapped_data$n_reads, breaks = n_bins, plot = FALSE)
-    y_limit <- max(c(raw_hist_data$counts, mapped_hist_data$counts)) * 1.1
+    raw_hist_data <- hist(raw_data[["n_reads"]], breaks = n_bins, plot = FALSE)
+    mapped_hist_data <- hist(mapped_data[["n_reads"]], breaks = n_bins, plot = FALSE)
+    y_limit <- max(c(raw_hist_data[["counts"]], mapped_hist_data[["counts"]])) * 1.1
     
     # Calculate summary statistics
-    raw_mean <- mean(raw_data$n_reads)
-    raw_median <- median(raw_data$n_reads)
-    mapped_mean <- mean(mapped_data$n_reads)
-    mapped_median <- median(mapped_data$n_reads)
+    raw_mean <- mean(raw_data[["n_reads"]])
+    raw_median <- median(raw_data[["n_reads"]])
+    mapped_mean <- mean(mapped_data[["n_reads"]])
+    mapped_median <- median(mapped_data[["n_reads"]])
     
     # Create initial reads histogram
     p_initial <- ggplot(raw_data, aes(x = n_reads)) +
@@ -403,6 +403,16 @@ process analyze_read_stats {
     
     ggsave("mapped_reads_histogram.png", plot = p_mapped, width = 8, height = 6, dpi = 300)
     cat("Saved mapped_reads_histogram.png\\n")
+    
+    # Print summary for logging
+    cat("\\nHistogram Summary:\\n")
+    cat("  Initial reads - Mean:", scales::comma(round(raw_mean)), 
+        "Median:", scales::comma(round(raw_median)), "\\n")
+    cat("  Mapped reads - Mean:", scales::comma(round(mapped_mean)), 
+        "Median:", scales::comma(round(mapped_median)), "\\n")
+    cat("  X-axis range:", scales::comma(round(x_limits[1])), "to", 
+        scales::comma(round(x_limits[2])), "\\n")
+    cat("  Y-axis range: 0 to", round(y_limit), "\\n")
 
     # Print summary statistics
     cat("\\n=== Summary Statistics ===\\n")
