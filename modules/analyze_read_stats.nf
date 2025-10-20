@@ -14,7 +14,6 @@ process analyze_read_stats {
         path("model_summary.txt")
         path("analysis_log.txt")
         path("stage_comparison.txt")
-        path("sample_trajectories.png")
     
     script:
     """
@@ -177,7 +176,23 @@ process analyze_read_stats {
             min_retention = min(retention_pct),
             max_retention = max(retention_pct),
             n_samples = n()
-        )
+        ) %>%
+
+        # Add ordering based on pipeline sequence
+        mutate(
+            transition_order = case_when(
+                transition == "raw -> trim3" ~ 1,
+                transition == "trim3 -> dedup" ~ 2,
+                transition == "dedup -> trim5" ~ 3,
+                transition == "trim5 -> fqscrn" ~ 4,
+                transition == "fqscrn -> repr" ~ 5,
+                transition == "repr -> map" ~ 6,
+                transition == "map -> pp" ~ 7,
+                TRUE ~ 99
+            )
+        ) %>%
+        arrange(transition_order) %>%
+        select(-transition_order)
     
     write_delim(retention_rates, "stage_comparison.txt", delim = "\\t")
     
@@ -295,8 +310,98 @@ process analyze_read_stats {
         ) +
         expand_limits(x = c(1, length(levels(clean_data\$stage)) + 1))
     
-    ggsave("sample_trajectories.png", plot = p2, width = 12, height = 8, dpi = 300)
+    #ggsave("sample_trajectories.png", plot = p2, width = 12, height = 8, dpi = 300)
     
+    # Raw Histogram
+    cat("\\nGenerating read distribution histograms...\\n")
+    
+    # Prepare data for histograms
+    raw_data <- clean_data %>%
+        filter(stage == "raw") %>%
+        select(sample_id, n_reads)
+    
+    mapped_data <- clean_data %>%
+        filter(stage == "map") %>%
+        select(sample_id, n_reads)
+    
+    # Calculate combined axis limits for consistent scaling
+    all_reads <- c(raw_data$n_reads, mapped_data$n_reads)
+    x_limits <- c(min(all_reads) * 0.9, max(all_reads) * 1.1)
+    
+    # Determine appropriate number of bins (same for both)
+    n_bins <- min(20, length(unique(all_reads)) / 2)
+    
+    # Calculate y-axis limit based on max frequency
+    raw_hist_data <- hist(raw_data$n_reads, breaks = n_bins, plot = FALSE)
+    mapped_hist_data <- hist(mapped_data$n_reads, breaks = n_bins, plot = FALSE)
+    y_limit <- max(c(raw_hist_data$counts, mapped_hist_data$counts)) * 1.1
+    
+    # Calculate summary statistics
+    raw_mean <- mean(raw_data$n_reads)
+    raw_median <- median(raw_data$n_reads)
+    mapped_mean <- mean(mapped_data$n_reads)
+    mapped_median <- median(mapped_data$n_reads)
+    
+    # Create initial reads histogram
+    p_initial <- ggplot(raw_data, aes(x = n_reads)) +
+        geom_histogram(bins = n_bins, fill = "skyblue", color = "black", alpha = 0.7) +
+        geom_vline(xintercept = raw_mean, color = "red", linetype = "dashed", linewidth = 1) +
+        geom_vline(xintercept = raw_median, color = "blue", linetype = "dotted", linewidth = 1) +
+        annotate("text", x = raw_mean, y = y_limit * 0.95, 
+                 label = paste0("Mean: ", scales::comma(round(raw_mean))),
+                 color = "red", hjust = -0.1, size = 3.5) +
+        annotate("text", x = raw_median, y = y_limit * 0.85, 
+                 label = paste0("Median: ", scales::comma(round(raw_median))),
+                 color = "blue", hjust = -0.1, size = 3.5) +
+        scale_x_continuous(labels = scales::comma, limits = x_limits) +
+        scale_y_continuous(limits = c(0, y_limit)) +
+        labs(
+            title = "Initial Read Distribution",
+            subtitle = paste0("Raw reads before QC (n = ", nrow(raw_data), " samples)"),
+            x = "Number of Read Pairs",
+            y = "Number of Samples"
+        ) +
+        theme_classic() +
+        theme(
+            plot.title = element_text(size = 14, face = "bold"),
+            plot.subtitle = element_text(size = 11),
+            axis.text = element_text(size = 10),
+            axis.title = element_text(size = 11)
+        )
+    
+    ggsave("initial_reads_histogram.png", plot = p_initial, width = 8, height = 6, dpi = 300)
+    cat("Saved initial_reads_histogram.png\\n")
+    
+    # Create mapped reads histogram
+    p_mapped <- ggplot(mapped_data, aes(x = n_reads)) +
+        geom_histogram(bins = n_bins, fill = "lightgreen", color = "black", alpha = 0.7) +
+        geom_vline(xintercept = mapped_mean, color = "red", linetype = "dashed", linewidth = 1) +
+        geom_vline(xintercept = mapped_median, color = "blue", linetype = "dotted", linewidth = 1) +
+        annotate("text", x = mapped_mean, y = y_limit * 0.95, 
+                 label = paste0("Mean: ", scales::comma(round(mapped_mean))),
+                 color = "red", hjust = -0.1, size = 3.5) +
+        annotate("text", x = mapped_median, y = y_limit * 0.85, 
+                 label = paste0("Median: ", scales::comma(round(mapped_median))),
+                 color = "blue", hjust = -0.1, size = 3.5) +
+        scale_x_continuous(labels = scales::comma, limits = x_limits) +
+        scale_y_continuous(limits = c(0, y_limit)) +
+        labs(
+            title = "Mapped Read Distribution",
+            subtitle = paste0("Reads after QC and mapping (n = ", nrow(mapped_data), " samples)"),
+            x = "Number of Read Pairs",
+            y = "Number of Samples"
+        ) +
+        theme_classic() +
+        theme(
+            plot.title = element_text(size = 14, face = "bold"),
+            plot.subtitle = element_text(size = 11),
+            axis.text = element_text(size = 10),
+            axis.title = element_text(size = 11)
+        )
+    
+    ggsave("mapped_reads_histogram.png", plot = p_mapped, width = 8, height = 6, dpi = 300)
+    cat("Saved mapped_reads_histogram.png\\n")
+
     # Print summary statistics
     cat("\\n=== Summary Statistics ===\\n")
     cat("Total samples analyzed:", n_distinct(clean_data\$sample_id), "\\n")

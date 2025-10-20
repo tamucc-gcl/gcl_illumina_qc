@@ -1,4 +1,5 @@
-process generate_report {
+# Generate the markdown report
+markdown_contentprocess generate_report {
     label 'generate_report'
     tag "final_report"
     
@@ -9,10 +10,14 @@ process generate_report {
         path read_summary
         path multiqc_reports
         val genome_source
+        path initial_histogram
+        path mapped_histogram
+        path initial_histogram
+        path mapped_histogram
         
     output:
-        path "pipeline_report.md"
-        path "pipeline_report.html"
+        path "qc_pipeline_report.md"
+        path "qc_pipeline_report.html"
     
     script:
     """
@@ -25,6 +30,10 @@ import os
 import subprocess
 import math
 from pathlib import Path
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
+import numpy as np
 
 # Parse genome source
 genome_source = "${genome_source}"
@@ -163,6 +172,35 @@ try:
                 pp_stats["min"] = min(properly_paired)
                 pp_stats["max"] = max(properly_paired)
                 pp_stats["n"] = len(properly_paired)
+            
+            # Create histograms
+            if raw_reads and final_reads:
+                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+                
+                # Initial reads histogram
+                ax1.hist(raw_reads, bins=min(20, len(set(raw_reads))), edgecolor='black', color='skyblue')
+                ax1.set_xlabel('Number of Read Pairs')
+                ax1.set_ylabel('Number of Samples')
+                ax1.set_title(f'Initial Read Distribution (n={len(raw_reads)})')
+                ax1.axvline(initial_stats["mean"], color='red', linestyle='--', label=f'Mean: {initial_stats["mean"]:,.0f}')
+                ax1.legend()
+                ax1.grid(True, alpha=0.3)
+                
+                # Final reads histogram
+                ax2.hist(final_reads, bins=min(20, len(set(final_reads))), edgecolor='black', color='lightgreen')
+                ax2.set_xlabel('Number of Read Pairs')
+                ax2.set_ylabel('Number of Samples')
+                ax2.set_title(f'Final Read Distribution (n={len(final_reads)})')
+                ax2.axvline(final_stats["mean"], color='red', linestyle='--', label=f'Mean: {final_stats["mean"]:,.0f}')
+                ax2.legend()
+                ax2.grid(True, alpha=0.3)
+                
+                plt.tight_layout()
+                plt.savefig('read_distribution_histograms.png', dpi=150, bbox_inches='tight')
+                plt.close()
+                print("Created read distribution histograms")
+            else:
+                print("Insufficient data for histograms")
                 
 except Exception as e:
     print(f"Could not read statistics from read summary: {e}")
@@ -223,6 +261,8 @@ markdown_content = f'''# GCL Illumina QC Pipeline Report
 
 ## Initial Sequencing
 
+![Initial Read Distribution](${params.outdir}/read_analysis/initial_reads_histogram.png)
+
 **Summary Statistics (n={initial_stats["n"]} samples):**
 - Mean reads: {fmt_num(initial_stats["mean"])}
 - Standard deviation: {fmt_num(initial_stats["sd"])}
@@ -234,9 +274,6 @@ markdown_content = f'''# GCL Illumina QC Pipeline Report
 ### Read Retention Through QC Pipeline
 ![QC Summary Plot](${params.outdir}/read_analysis/qc_summary_plot.png)
 
-### Individual Sample Trajectories
-![Sample Trajectories](${params.outdir}/read_analysis/sample_trajectories.png)
-
 ### MultiQC Reports
 {chr(10).join(multiqc_links) if multiqc_links else "No MultiQC reports found"}
 
@@ -246,6 +283,9 @@ See [stage_comparison.txt](${params.outdir}/read_analysis/stage_comparison.txt) 
 ## Post QC
 
 ### Mapped Reads
+
+![Mapped Read Distribution](${params.outdir}/read_analysis/mapped_reads_histogram.png)
+
 **Summary Statistics (n={final_stats["n"]} samples):**
 - Mean reads: {fmt_num(final_stats["mean"])}
 - Standard deviation: {fmt_num(final_stats["sd"])}
@@ -262,14 +302,14 @@ See [final_qc_readCounts.txt](${params.outdir}/final_qc_readCounts.txt) for deta
 '''
 
 # Write markdown file
-with open("pipeline_report.md", 'w') as f:
+with open("qc_pipeline_report.md", 'w') as f:
     f.write(markdown_content)
 
 print("Markdown report generated successfully!")
 
 # Convert to HTML using pandoc if available
 try:
-    subprocess.run(['pandoc', 'pipeline_report.md', '-o', 'pipeline_report.html', '--standalone', '--metadata', 'title=GCL QC Pipeline Report'], check=True)
+    subprocess.run(['pandoc', 'qc_pipeline_report.md', '-o', 'qc_pipeline_report.html', '--standalone', '--metadata', 'title=GCL QC Pipeline Report'], check=True)
     print("HTML report generated successfully!")
 except:
     # If pandoc not available, create a simple HTML wrapper
@@ -291,7 +331,7 @@ except:
 <pre>{markdown_content}</pre>
 </body>
 </html>'''
-    with open("pipeline_report.html", 'w') as f:
+    with open("qc_pipeline_report.html", 'w') as f:
         f.write(html_content)
     print("Basic HTML report generated (pandoc not available)")
 PYEOF
