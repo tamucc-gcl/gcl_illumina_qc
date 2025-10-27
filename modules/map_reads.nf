@@ -17,7 +17,11 @@ process map_reads {
         ${read1} \
         ${read2} | \
     samtools view -@ ${task.cpus ?: 8} -Sb - | \
-    samtools sort -@ ${task.cpus ?: 8} -o ${sample_id}.bam -
+    samtools sort -@ ${task.cpus ?: 8} -o ${sample_id}.sorted.bam -
+
+    # Mark duplicates
+    samtools markdup -@ ${task.cpus ?: 8} ${sample_id}.sorted.bam ${sample_id}.bam
+    rm ${sample_id}.sorted.bam
 
     # Index the BAM file
     samtools index ${sample_id}.bam
