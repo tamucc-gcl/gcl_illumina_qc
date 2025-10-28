@@ -16,5 +16,7 @@ process index_genome {
   bwa-mem2 index ${genome}
 
   samtools faidx ${genome}
+
+  picard CreateSequenceDictionary R=${genome}
   """
 }
