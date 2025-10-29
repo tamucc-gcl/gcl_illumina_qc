@@ -17,6 +17,6 @@ process index_genome {
 
   samtools faidx ${genome}
 
-  picard CreateSequenceDictionary R=${genome}
+  #picard CreateSequenceDictionary R=${genome}
   """
 }
