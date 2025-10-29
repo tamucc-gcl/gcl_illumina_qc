@@ -225,7 +225,7 @@ markdown_content = f'''# GCL Illumina QC Pipeline Report
 
 ## Initial Sequencing
 
-![Initial Read Distribution](${params.outdir}/read_analysis/initial_reads_histogram.png)
+![Initial Read Distribution](${params.outdir}/qc_analysis/initial_reads_histogram.png)
 
 **Summary Statistics (n={initial_stats["n"]} samples):**
 - Mean reads: {fmt_num(initial_stats["mean"])}
@@ -236,19 +236,19 @@ markdown_content = f'''# GCL Illumina QC Pipeline Report
 ## Sequencing QC
 
 ### Read Retention Through QC Pipeline
-![QC Summary Plot](${params.outdir}/read_analysis/qc_summary_plot.png)
+![QC Summary Plot](${params.outdir}/qc_analysis/qc_summary_plot.png)
 
 ### MultiQC Reports (download locally to view)
 {chr(10).join(multiqc_links) if multiqc_links else "No MultiQC reports found"}
 
 ### Stage-by-Stage Comparison
-See [stage_comparison.txt](${params.outdir}/read_analysis/stage_comparison.txt) for detailed retention rates between stages.
+See [stage_comparison.txt](${params.outdir}/qc_analysis/stage_comparison.txt) for detailed retention rates between stages.
 
 ## Post QC
 
 ### Mapped Reads
 
-![Mapped Read Distribution](${params.outdir}/read_analysis/mapped_reads_histogram.png)
+![Mapped Read Distribution](${params.outdir}/qc_analysis/mapped_reads_histogram.png)
 
 **Summary Statistics (n={final_stats["n"]} samples):**
 - Mean reads: {fmt_num(final_stats["mean"])}
