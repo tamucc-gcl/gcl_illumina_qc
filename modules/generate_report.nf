@@ -285,7 +285,7 @@ See [stage_comparison.txt](${params.outdir}/qc_analysis/stage_comparison.txt) fo
 See [${mapping_summary}](${params.outdir}/${mapping_summary}) for detailed mapping statistics per sample.
 
 ---
-*Report generated on: {subprocess.check_output(['date']).decode().strip()}*
+*QC Report generated on: {subprocess.check_output(['date']).decode().strip()}*
 '''
 
 # Write markdown file
