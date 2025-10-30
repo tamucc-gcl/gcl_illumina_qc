@@ -282,7 +282,7 @@ See [stage_comparison.txt](${params.outdir}/qc_analysis/stage_comparison.txt) fo
 - Overall mapping rate: {final_stats["map_pct"]:.2f}%
 
 ### Final Mapping Statistics
-See [${mapping_summary}](${params.outdir}/${mapping_summary}) for detailed mapping statistics per sample.
+See [${mapping_summary}](${params.outdir}/qc_analysis/${mapping_summary}) for detailed mapping statistics per sample.
 
 ---
 *QC Report generated on: {subprocess.check_output(['date']).decode().strip()}*
