@@ -256,11 +256,6 @@ See [stage_comparison.txt](${params.outdir}/qc_analysis/stage_comparison.txt) fo
 - Min reads: {fmt_num(final_stats["min"])}
 - Max reads: {fmt_num(final_stats["max"])}
 
-{pp_section}
-
-### Final Mapping Statistics
-See [final_qc_readCounts.txt](${params.outdir}/final_qc_readCounts.txt) for detailed mapping statistics per sample.
-
 ---
 *Report generated on: {subprocess.check_output(['date']).decode().strip()}*
 '''
