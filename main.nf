@@ -257,7 +257,8 @@ workflow {
         all_multiqc_reports,
         genome_source,
         analyze_read_stats.out[5],  // initial_reads_histogram.png
-        analyze_read_stats.out[6]   // mapped_reads_histogram.png
+        analyze_read_stats.out[6],   // mapped_reads_histogram.png
+        samtools_summary.out
     )
 }
 

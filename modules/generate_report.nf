@@ -11,6 +11,7 @@ process generate_report {
         val genome_source
         path initial_histogram
         path mapped_histogram
+        path mapping_summary
         
     output:
         path "qc_pipeline_report.md"
@@ -78,7 +79,7 @@ else:
 
 # Read the read count summary to get statistics
 initial_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0}
-final_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0}
+final_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0, "map_pct": 0}
 pp_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0}
 
 try:
@@ -157,6 +158,29 @@ try:
                 final_stats["min"] = min(final_reads)
                 final_stats["max"] = max(final_reads)
                 final_stats["n"] = len(final_reads)
+                try:
+                    with open("${mapping_summary}", 'r') as f:
+                        map_lines = f.readlines()
+                        if len(map_lines) > 1:  # Skip header
+                            total_reads_all = 0
+                            mapped_reads_all = 0
+                            for line in map_lines[1:]:
+                                parts = line.strip().split('\t')
+                                if len(parts) >= 5:
+                                    try:
+                                        total_reads_all += int(parts[1])  # Total_Reads column
+                                        mapped_reads_all += int(parts[2])  # Mapped_Reads column
+                                    except (ValueError, IndexError):
+                                        continue
+                            
+                            if total_reads_all > 0:
+                                overall_map_rate = (mapped_reads_all / total_reads_all) * 100
+                                final_stats["map_pct"] = overall_map_rate
+                            else:
+                                final_stats["map_pct"] = 0
+                except Exception as e:
+                    print(f"Could not calculate mapping rate from mapping_summary: {e}")
+                    final_stats["map_pct"] = 0
             
             # Calculate properly paired statistics if available
             if properly_paired:
@@ -255,6 +279,10 @@ See [stage_comparison.txt](${params.outdir}/qc_analysis/stage_comparison.txt) fo
 - Standard deviation: {fmt_num(final_stats["sd"])}
 - Min reads: {fmt_num(final_stats["min"])}
 - Max reads: {fmt_num(final_stats["max"])}
+- Overall mapping rate: {final_stats["map_pct"]:.2f}%
+
+### Final Mapping Statistics
+See [${mapping_summary}](${params.outdir}/${mapping_summary}) for detailed mapping statistics per sample.
 
 ---
 *Report generated on: {subprocess.check_output(['date']).decode().strip()}*
