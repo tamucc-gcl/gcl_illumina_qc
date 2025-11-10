@@ -71,12 +71,12 @@ if genome_source.startswith("denovo:"):
                 filter_content = f.read()
                 
                 # Extract filtering parameters
-                cutoff1_match = re.search(r'Cutoff 1.*?: (\d+)', filter_content)
-                cutoff2_match = re.search(r'Cutoff 2.*?: (\d+)', filter_content)
-                total_uniq_match = re.search(r'Total unique sequences: (\d+)', filter_content)
-                after_indiv_match = re.search(r'Sequences after per-individual filter: (\d+)', filter_content)
-                after_count_match = re.search(r'Sequences after individual count filter: (\d+)', filter_content)
-                final_seqs_match = re.search(r'Final sequences for assembly: (\d+)', filter_content)
+                cutoff1_match = re.search(r'Cutoff 1.*?: (\\d+)', filter_content)
+                cutoff2_match = re.search(r'Cutoff 2.*?: (\\d+)', filter_content)
+                total_uniq_match = re.search(r'Total unique sequences: (\\d+)', filter_content)
+                after_indiv_match = re.search(r'Sequences after per-individual filter: (\\d+)', filter_content)
+                after_count_match = re.search(r'Sequences after individual count filter: (\\d+)', filter_content)
+                final_seqs_match = re.search(r'Final sequences for assembly: (\\d+)', filter_content)
                 
                 if cutoff1_match and cutoff2_match:
                     assembly_info.append(f"**Filtering Parameters:**")
@@ -105,11 +105,11 @@ if genome_source.startswith("denovo:"):
                 content = f.read()
                 
                 # Extract assembly parameters
-                cluster_sim_match = re.search(r'Initial clustering: ([\d.]+)', content)
-                div_f_match = re.search(r'Rainbow div -f: ([\d.]+)', content)
-                div_K_match = re.search(r'Rainbow div -K: (\d+)', content)
-                merge_r_match = re.search(r'Rainbow merge -r: (\d+)', content)
-                final_cluster_match = re.search(r'Final clustering: ([\d.]+)', content)
+                cluster_sim_match = re.search(r'Initial clustering: ([\\d.]+)', content)
+                div_f_match = re.search(r'Rainbow div -f: ([\\d.]+)', content)
+                div_K_match = re.search(r'Rainbow div -K: (\\d+)', content)
+                merge_r_match = re.search(r'Rainbow merge -r: (\\d+)', content)
+                final_cluster_match = re.search(r'Final clustering: ([\\d.]+)', content)
                 
                 if cluster_sim_match:
                     assembly_info.append(f"**Rainbow Assembly Parameters:**")
@@ -125,13 +125,13 @@ if genome_source.startswith("denovo:"):
                     assembly_info.append("")
                 
                 # Extract assembly metrics
-                input_seqs_match = re.search(r'Input sequences: (\d+)', content)
-                final_contigs_match = re.search(r'Final reference contigs: (\d+)', content)
-                total_bases_match = re.search(r'Total bases: (\d+)', content)
-                n50_match = re.search(r'N50: (\d+)', content)
-                min_contig_match = re.search(r'Min contig: (\d+)', content)
-                max_contig_match = re.search(r'Max contig: (\d+)', content)
-                mean_contig_match = re.search(r'Mean contig: (\d+)', content)
+                input_seqs_match = re.search(r'Input sequences: (\\d+)', content)
+                final_contigs_match = re.search(r'Final reference contigs: (\\d+)', content)
+                total_bases_match = re.search(r'Total bases: (\\d+)', content)
+                n50_match = re.search(r'N50: (\\d+)', content)
+                min_contig_match = re.search(r'Min contig: (\\d+)', content)
+                max_contig_match = re.search(r'Max contig: (\\d+)', content)
+                mean_contig_match = re.search(r'Mean contig: (\\d+)', content)
                 
                 if final_contigs_match:
                     assembly_info.append(f"**Assembly Metrics:**")
@@ -156,11 +156,11 @@ if genome_source.startswith("denovo:"):
                     assembly_info.append("")
                 
                 # Extract contig size distribution
-                dist_10kb = re.search(r'>10kb: (\d+)', content)
-                dist_5_10kb = re.search(r'5-10kb: (\d+)', content)
-                dist_1_5kb = re.search(r'1-5kb: (\d+)', content)
-                dist_500_1kb = re.search(r'500bp-1kb: (\d+)', content)
-                dist_sub500 = re.search(r'<500bp: (\d+)', content)
+                dist_10kb = re.search(r'>10kb: (\\d+)', content)
+                dist_5_10kb = re.search(r'5-10kb: (\\d+)', content)
+                dist_1_5kb = re.search(r'1-5kb: (\\d+)', content)
+                dist_500_1kb = re.search(r'500bp-1kb: (\\d+)', content)
+                dist_sub500 = re.search(r'<500bp: (\\d+)', content)
                 
                 if any([dist_10kb, dist_5_10kb, dist_1_5kb, dist_500_1kb, dist_sub500]):
                     assembly_info.append(f"**Contig Size Distribution:**")
