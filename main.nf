@@ -1,6 +1,7 @@
 // main.nf – GCL Illumina QC pipeline
 // July 2025 – consolidated MultiQC per step
 // Oct 2025 - implement local genome option
+// Nov 2025 - add de novo assembly option
 
 nextflow.enable.dsl = 2
 
@@ -14,18 +15,27 @@ params.decontam_conffile    = "/work/birdlab/fastq_screen_databases/example_fast
 params.sequencing_type = "whole_genome"  // Options: "ddrad" or "whole_genome"
 params.outdir      = "results"
 
+// Assembly parameters
+params.cutoff1 = 4          // Minimum reads per individual
+params.cutoff2 = 4          // Minimum number of individuals  
+params.cluster_similarity = 0.8
+params.div_f = 0.5
+params.div_K = 10
+params.merge_r = 2
+params.final_similarity = 0.9
+
 //--------------------------------------------------------------------
 // WORKFLOW DEFINITION
 //--------------------------------------------------------------------
 workflow {
     // Validate genome input parameters
-    if (!params.genome && !params.accession) {
-        error "Error: Either --genome (local file) or --accession (NCBI) must be specified"
-    }
-    if (params.genome && params.accession) {
+    if (!params.genome && !params.accession && params.assembly_mode == "none") {
+        log.info "No reference genome provided - will output cleaned FASTQ files only"
+    } else if (!params.genome && !params.accession && params.assembly_mode == "denovo") {
+        log.info "No reference genome provided - will perform de novo assembly"
+    } else if (params.genome && params.accession) {
         log.warn "Warning: Both --genome and --accession specified. Using local genome: ${params.genome}"
     }
-
     //----------------------------------------------------------------
     // 1. RAW READ INPUT
     //----------------------------------------------------------------
@@ -48,21 +58,7 @@ workflow {
     )
 
     //----------------------------------------------------------------
-    // 3. GENOME PREP  (download ➜ index OR local ➜ index)
-    //----------------------------------------------------------------
-    if (params.genome) {
-        // Use local genome file
-        genome_file = file(params.genome, checkIfExists: true)
-        prepare_genome_local( Channel.value(genome_file) )
-        genome_indexed = prepare_genome_local.out.genome
-    } else {
-        // Download genome from NCBI
-        prepare_genome( Channel.value( params.accession ) )
-        genome_indexed = prepare_genome.out.genome
-    }
-
-    //----------------------------------------------------------------
-    // 4. QC PIPELINE STEPS
+    // 3. QC PIPELINE STEPS - through repair
     //----------------------------------------------------------------
     
     // Step 1: 3' trimming with fastp
@@ -189,54 +185,145 @@ workflow {
         Channel.value('repair')
     )
     
-    // Step 6: Map reads to genome (use the indexed genome from either path)
-    map_reads( repair.out, genome_indexed )
+    //----------------------------------------------------------------
+    // 4. GENOME PREPARATION AND MAPPING (branching logic)
+    //----------------------------------------------------------------
     
-    // Step 7: Generate BAM statistics
-    samtools_stats( map_reads.out )
-    
-    // MultiQC for mapping (samtools stats + flagstats)
-    multiqc_mapping_out = multiqc_mapping(
-        samtools_stats.out
-            .map{ sid, stats, flagstats -> [stats, flagstats] }
-            .flatten()
-            .collect(),
-        Channel.value('mapping')
-    )
-
-    // Create mapping summary
-    samtools_summary(
-        samtools_stats.out
-            .map{ sid, stats, flagstats -> stats }
-            .collect()
-    )
-
-    // Collect all the general stats files using indexed outputs
-    // multiqc_*_out[0] = HTML file, multiqc_*_out[1] = stats file
-    all_stats = Channel.empty()
-        .mix(
-            multiqc_raw_out[1],        // Get the stats file (index 1)
-            multiqc_trim3_out[1],
-            multiqc_clumpify_out[1],
-            multiqc_trim5_out[1],
-            multiqc_screen_out[1],
-            multiqc_repair_out[1],
-            multiqc_mapping_out[1],    // Add mapping MultiQC stats
-            samtools_summary.out       // Add the mapping summary file
+    // Branch based on genome availability and assembly mode
+    if (params.genome || params.accession) {
+        // Option 1: Reference genome provided
+        log.info "Using provided reference genome for mapping"
+        
+        if (params.genome) {
+            // Use local genome file
+            genome_file = file(params.genome, checkIfExists: true)
+            prepare_genome_local( Channel.value(genome_file) )
+            genome_indexed = prepare_genome_local.out.genome
+        } else {
+            // Download genome from NCBI
+            prepare_genome( Channel.value( params.accession ) )
+            genome_indexed = prepare_genome.out.genome
+        }
+        
+        // Map reads to reference
+        map_reads( repair.out, genome_indexed )
+        
+        // Generate BAM statistics
+        samtools_stats( map_reads.out )
+        
+        // MultiQC for mapping
+        multiqc_mapping_out = multiqc_mapping(
+            samtools_stats.out
+                .map{ sid, stats, flagstats -> [stats, flagstats] }
+                .flatten()
+                .collect(),
+            Channel.value('mapping')
         )
-        .collect()
+        
+        // Create mapping summary
+        samtools_summary(
+            samtools_stats.out
+                .map{ sid, stats, flagstats -> stats }
+                .collect()
+        )
+        
+        mapping_summary_ch = samtools_summary.out
+        
+    } else if (params.assembly_mode == "denovo") {
+        // Option 2: De novo assembly workflow
+        log.info "Performing de novo assembly from cleaned reads"
+        
+        // Run de novo assembly using repaired reads
+        perform_denovo_assembly( repair.out )
+        
+        // Use the de novo assembly as reference genome
+        log.info "Indexing de novo assembly"
+        prepare_genome_local( perform_denovo_assembly.out.reference )
+        genome_indexed = prepare_genome_local.out.genome
+        
+        // Map reads to de novo assembly
+        map_reads( repair.out, genome_indexed )
+        
+        // Generate BAM statistics
+        samtools_stats( map_reads.out )
+        
+        // MultiQC for mapping
+        multiqc_mapping_out = multiqc_mapping(
+            samtools_stats.out
+                .map{ sid, stats, flagstats -> [stats, flagstats] }
+                .flatten()
+                .collect(),
+            Channel.value('mapping_denovo')
+        )
+        
+        // Create mapping summary
+        samtools_summary(
+            samtools_stats.out
+                .map{ sid, stats, flagstats -> stats }
+                .collect()
+        )
+        
+        mapping_summary_ch = samtools_summary.out
+        
+    } else {
+        // Option 3: No genome mode - just output cleaned reads
+        log.info "No reference genome - outputting cleaned FASTQ files only"
+        
+        output_cleaned_reads( repair.out )
+        
+        // Create empty channels for mapping-related outputs
+        multiqc_mapping_out = Channel.empty()
+        mapping_summary_ch = Channel.value("NO_MAPPING")
+    }
+
+    //----------------------------------------------------------------
+    // 5. COLLECT STATS AND GENERATE REPORT
+    //----------------------------------------------------------------
     
+    // Collect all the general stats files
+    if (params.assembly_mode != "denovo" && (!params.genome && !params.accession)) {
+        // No mapping mode - collect stats without mapping
+        all_stats = Channel.empty()
+            .mix(
+                multiqc_raw_out[1],
+                multiqc_trim3_out[1],
+                multiqc_clumpify_out[1],
+                multiqc_trim5_out[1],
+                multiqc_screen_out[1],
+                multiqc_repair_out[1]
+            )
+            .collect()
+    } else {
+        // Include mapping stats
+        all_stats = Channel.empty()
+            .mix(
+                multiqc_raw_out[1],
+                multiqc_trim3_out[1],
+                multiqc_clumpify_out[1],
+                multiqc_trim5_out[1],
+                multiqc_screen_out[1],
+                multiqc_repair_out[1],
+                multiqc_mapping_out[1],
+                mapping_summary_ch
+            )
+            .collect()
+    }
+
     // Run R analysis on collected stats
     analyze_read_stats(all_stats)
     
     //----------------------------------------------------------------
-    // 8. GENERATE FINAL REPORT
+    // 6. GENERATE FINAL REPORT
     //----------------------------------------------------------------
     
     // Prepare genome source information
     genome_source = params.genome 
         ? Channel.value("local:${params.genome}")
-        : Channel.value("accession:${params.accession}")
+        : params.accession
+        ? Channel.value("accession:${params.accession}")
+        : params.assembly_mode == "denovo"
+        ? Channel.value("denovo:assembled")
+        : Channel.value("none:no_reference")
     
     // Collect all MultiQC HTML reports
     all_multiqc_reports = Channel.empty()
@@ -296,6 +383,47 @@ workflow prepare_genome_local {
 }
 
 //--------------------------------------------------------------------
+// SUB‑WORKFLOW: de novo assemble genome from ddrad: https://ddocent.com/assembly/
+//--------------------------------------------------------------------
+workflow perform_denovo_assembly {
+    take:
+        cleaned_reads
+    
+    main:
+        // Step 1: Extract unique sequences for each sample
+        extract_unique_seqs( cleaned_reads )
+        
+        // Step 2: Collect all unique sequence files and filter
+        all_uniq_seqs = extract_unique_seqs.out.uniq_seqs
+            .map{ sid, file -> file }
+            .collect()
+        
+        filter_unique_seqs( 
+            all_uniq_seqs,
+            params.cutoff1,
+            params.cutoff2
+        )
+        
+        // Step 3: Perform Rainbow assembly
+        assemble_rainbow(
+            filter_unique_seqs.out.filtered_fasta,
+            filter_unique_seqs.out.totaluniqseq,
+            params.cluster_similarity,
+            params.div_f,
+            params.div_K,
+            params.merge_r,
+            params.final_similarity
+        )
+        
+    emit:
+        reference = assemble_rainbow.out.reference
+        assembly_stats = assemble_rainbow.out.stats
+        filter_stats = filter_unique_seqs.out.stats
+    
+}
+
+
+//--------------------------------------------------------------------
 // MODULE IMPORTS
 //--------------------------------------------------------------------
 include { fastp_trim_3 }      from './modules/fastp_trim_3.nf'
@@ -311,6 +439,12 @@ include { index_genome }      from './modules/index_genome.nf'
 include { stage_local_genome } from './modules/stage_local_genome.nf'
 include { analyze_read_stats } from './modules/analyze_read_stats.nf'
 include { generate_report } from './modules/generate_report.nf'
+include { output_cleaned_reads } from './modules/output_cleaned_reads.nf'
+
+// de novo assembly modules
+include { extract_unique_seqs } from './modules/extract_unique_seqs.nf'
+include { filter_unique_seqs } from './modules/filter_unique_seqs.nf'
+include { assemble_rainbow } from './modules/assemble_rainbow.nf'
 
 include { fastqc_raw }        from './modules/fastqc.nf'
 include { fastqc_generic as fastqc_trim3 }    from './modules/fastqc.nf'

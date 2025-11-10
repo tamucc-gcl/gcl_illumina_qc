@@ -1,4 +1,18 @@
 // modules/analyze_read_stats.nf
+
+/*
+TO ADD - ANALYSIS OF PERCENT LOSS PER STEP
+read_delim('read_counts_summary.txt') %>%
+  pivot_longer(cols = -sample_id) %>%
+  mutate(pct_loss = 1 - value / lag(value),
+         .by = sample_id,
+         .keep = 'unused') %>%
+  filter(!is.na(pct_loss)) %>%
+  mutate(name = fct_inorder(name)) %>%
+  ggplot(aes(x = name, y = pct_loss)) +
+  geom_point()
+*/
+
 process analyze_read_stats {
     label 'r_analysis'
     tag "read_stats_analysis"

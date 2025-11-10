@@ -1,0 +1,19 @@
+cd data/bam
+module load samtools
+
+#Mean insert size calculation for all BAM files in the directory
+echo -e "bam\tmean_insert_size" > mean_insert_sizes.tsv
+for bam in *.bam; do
+    mean=$(samtools stats "$bam" \
+        | awk '/^IS/ {sz=$2; n=$3; sum+=sz*n; count+=n} END{print sum/count}')
+    echo -e "${bam}\t${mean}" >> mean_insert_sizes.tsv
+done
+
+#Insert size histogram generation for all BAM files in the directory
+mkdir -p insert_hist
+for bam in *.bam; do
+    sample=${bam%.bam}
+    samtools stats "$bam" \
+      | awk '/^IS/ {print $2"\t"$3}' \
+      > insert_hist/"${sample}.insert_hist.tsv"
+done
