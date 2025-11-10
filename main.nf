@@ -191,10 +191,6 @@ workflow {
     // 4. GENOME PREPARATION AND MAPPING (branching logic)
     //----------------------------------------------------------------
     
-    // Initialize channels for assembly stats
-    assembly_stats_ch = Channel.value("NO_ASSEMBLY")
-    filter_stats_ch = Channel.value("NO_ASSEMBLY")
-    
     // Branch based on genome availability and assembly mode
     if (params.genome || params.accession) {
         // Option 1: Reference genome provided
@@ -234,6 +230,16 @@ workflow {
         )
         
         mapping_summary_ch = samtools_summary.out
+        
+        // No assembly stats for reference genome mode - create empty placeholder files inline
+        assembly_stats_ch = Channel.fromPath("$projectDir/NO_ASSEMBLY", checkIfExists: false).ifEmpty { 
+            file("NO_ASSEMBLY").text = "No assembly performed"
+            return file("NO_ASSEMBLY")
+        }
+        filter_stats_ch = Channel.fromPath("$projectDir/NO_FILTER", checkIfExists: false).ifEmpty { 
+            file("NO_FILTER").text = "No filtering performed"
+            return file("NO_FILTER")
+        }
         
     } else if (params.assembly_mode == "denovo") {
         // Option 2: De novo assembly workflow
@@ -287,6 +293,16 @@ workflow {
             Channel.value("NO_MAPPING_STATS")
         )
         mapping_summary_ch = Channel.empty()  // Use empty channel instead of value
+        
+        // No assembly stats for no-genome mode - create empty placeholder files inline
+        assembly_stats_ch = Channel.fromPath("$projectDir/NO_ASSEMBLY", checkIfExists: false).ifEmpty { 
+            file("NO_ASSEMBLY").text = "No assembly performed"
+            return file("NO_ASSEMBLY")
+        }
+        filter_stats_ch = Channel.fromPath("$projectDir/NO_FILTER", checkIfExists: false).ifEmpty { 
+            file("NO_FILTER").text = "No filtering performed"
+            return file("NO_FILTER")
+        }
     }
     
     //----------------------------------------------------------------
@@ -326,8 +342,21 @@ workflow {
     analyze_read_stats(all_stats)
     
     //----------------------------------------------------------------
-    // 6. GENERATE FINAL REPORT
+    // 6. GENERATE FINAL REPORT - WITH PLACEHOLDER PROCESS
     //----------------------------------------------------------------
+    
+    // Create a simple process to generate placeholder files when needed
+    process create_assembly_placeholders {
+        output:
+            path "no_assembly_stats.txt"
+            path "no_filter_stats.txt"
+        
+        script:
+        """
+        echo "No assembly performed" > no_assembly_stats.txt
+        echo "No filtering performed" > no_filter_stats.txt
+        """
+    }
     
     // Prepare genome source information
     genome_source = params.genome 
@@ -354,6 +383,16 @@ workflow {
     // Use ifEmpty to provide a default value when no mapping was done
     mapping_summary_for_report = mapping_summary_ch.ifEmpty("NO_MAPPING")
     
+    // Handle assembly stats - create placeholders if needed
+    if (params.assembly_mode == "denovo") {
+        final_assembly_stats = assembly_stats_ch
+        final_filter_stats = filter_stats_ch
+    } else {
+        placeholder_outputs = create_assembly_placeholders()
+        final_assembly_stats = placeholder_outputs[0]
+        final_filter_stats = placeholder_outputs[1]
+    }
+    
     // Generate final report with assembly stats
     generate_report(
         analyze_read_stats.out[0],  // qc_summary_plot.png
@@ -363,8 +402,8 @@ workflow {
         analyze_read_stats.out[5],  // initial_reads_histogram.png
         analyze_read_stats.out[6],  // mapped_reads_histogram.png
         mapping_summary_for_report,
-        assembly_stats_ch,           // Assembly statistics
-        filter_stats_ch              // Filter statistics
+        final_assembly_stats,        // Assembly statistics (actual or placeholder)
+        final_filter_stats           // Filter statistics (actual or placeholder)
     )
 }
 

@@ -30,11 +30,17 @@ process generate_report {
     fi
     
     # Check if assembly stats exist
-    if [ "${assembly_stats}" == "NO_ASSEMBLY" ]; then
-        echo "No assembly performed" > assembly_stats.txt
+    if [[ "${assembly_stats}" == *"no_assembly"* ]] || [[ "${assembly_stats}" == *"NO_ASSEMBLY"* ]]; then
         ASSEMBLY_PERFORMED="false"
     else
         ASSEMBLY_PERFORMED="true"
+    fi
+    
+    # Check if filter stats exist
+    if [[ "${filter_stats}" == *"no_filter"* ]] || [[ "${filter_stats}" == *"NO_FILTER"* ]]; then
+        FILTER_PERFORMED="false"
+    else
+        FILTER_PERFORMED="true"
     fi
 
     cat <<'PYEOF' > generate_report.py
@@ -57,6 +63,7 @@ assembly_section = ""
 
 # Check if de novo assembly was performed
 assembly_performed = "${ASSEMBLY_PERFORMED}" == "true"
+filter_performed = "${FILTER_PERFORMED}" == "true"
 
 if genome_source.startswith("denovo:"):
     species_name = ""  # No species name for de novo
@@ -64,7 +71,7 @@ if genome_source.startswith("denovo:"):
     # Read assembly statistics if available
     assembly_info = []
     
-    if assembly_performed:
+    if filter_performed:
         try:
             # Read filter stats
             with open("${filter_stats}", 'r') as f:
