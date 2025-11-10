@@ -272,15 +272,18 @@ workflow {
         output_cleaned_reads( repair.out )
         
         // Create empty channels for mapping-related outputs
-        multiqc_mapping_out = Channel.empty()
-        mapping_summary_ch = Channel.value("NO_MAPPING")
+        multiqc_mapping_out = Channel.empty().mix(
+            Channel.value("NO_MAPPING_HTML"),
+            Channel.value("NO_MAPPING_STATS")
+        )
+        mapping_summary_ch = Channel.empty()  // Use empty channel instead of value
     }
-
+    
     //----------------------------------------------------------------
     // 5. COLLECT STATS AND GENERATE REPORT
     //----------------------------------------------------------------
     
-    // Collect all the general stats files
+    // Collect all the general stats files based on mode
     if (params.assembly_mode != "denovo" && (!params.genome && !params.accession)) {
         // No mapping mode - collect stats without mapping
         all_stats = Channel.empty()
@@ -308,7 +311,7 @@ workflow {
             )
             .collect()
     }
-
+    
     // Run R analysis on collected stats
     analyze_read_stats(all_stats)
     
@@ -337,6 +340,10 @@ workflow {
         )
         .collect()
     
+    // Handle mapping summary for report generation
+    // Use ifEmpty to provide a default value when no mapping was done
+    mapping_summary_for_report = mapping_summary_ch.ifEmpty("NO_MAPPING")
+    
     // Generate final report
     generate_report(
         analyze_read_stats.out[0],  // qc_summary_plot.png
@@ -344,8 +351,8 @@ workflow {
         all_multiqc_reports,
         genome_source,
         analyze_read_stats.out[5],  // initial_reads_histogram.png
-        analyze_read_stats.out[6],   // mapped_reads_histogram.png
-        samtools_summary.out
+        analyze_read_stats.out[6],  // mapped_reads_histogram.png
+        mapping_summary_for_report
     )
 }
 

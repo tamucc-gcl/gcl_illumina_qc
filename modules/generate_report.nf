@@ -19,6 +19,14 @@ process generate_report {
     
     script:
     """
+    # Check if mapping was performed
+    if [ "${mapping_summary}" == "NO_MAPPING" ]; then
+        echo "No mapping performed" > mapping_summary.txt
+        MAPPING_PERFORMED="false"
+    else
+        MAPPING_PERFORMED="true"
+    fi
+
     cat <<'PYEOF' > generate_report.py
 #!/usr/bin/env python3
 
