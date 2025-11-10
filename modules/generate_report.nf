@@ -86,9 +86,14 @@ else:
     reference_line = "Reference genome used: Unknown source"
 
 # Read the read count summary to get statistics
-initial_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0}
-final_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0, "map_pct": 0}
+initial_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0, "total": 0}
+final_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0, "map_pct": 0, "total": 0}
 pp_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0}
+
+# Variables for calculating total base pairs
+total_bases_raw = 0
+total_bases_mapped = 0
+read_length_estimate = 150  # Default estimate, will try to get actual from FastQC
 
 try:
     with open("${read_summary}", 'r') as f:
@@ -120,7 +125,9 @@ try:
                     try:
                         val = parts[col_indices['raw']]
                         if val and val != 'NA' and val != '':
-                            raw_reads.append(int(float(val)))
+                            raw_val = int(float(val))
+                            raw_reads.append(raw_val)
+                            initial_stats["total"] += raw_val
                     except (ValueError, IndexError) as e:
                         print(f"Error parsing raw value: {e}")
                 
@@ -129,14 +136,18 @@ try:
                     try:
                         val = parts[col_indices['map']]
                         if val and val != 'NA' and val != '':
-                            final_reads.append(int(float(val)))
+                            map_val = int(float(val))
+                            final_reads.append(map_val)
+                            final_stats["total"] += map_val
                     except (ValueError, IndexError) as e:
                         print(f"Error parsing map value: {e}")
                 elif 'repr' in col_indices and col_indices['repr'] < len(parts):
                     try:
                         val = parts[col_indices['repr']]
                         if val and val != 'NA' and val != '':
-                            final_reads.append(int(float(val)))
+                            repr_val = int(float(val))
+                            final_reads.append(repr_val)
+                            final_stats["total"] += repr_val
                     except (ValueError, IndexError) as e:
                         print(f"Error parsing repr value: {e}")
                 
@@ -149,8 +160,8 @@ try:
                     except (ValueError, IndexError) as e:
                         print(f"Error parsing pp value: {e}")
             
-            print(f"Raw reads: {len(raw_reads)} samples")
-            print(f"Final reads: {len(final_reads)} samples")
+            print(f"Raw reads: {len(raw_reads)} samples, total: {initial_stats['total']}")
+            print(f"Final reads: {len(final_reads)} samples, total: {final_stats['total']}")
             print(f"Properly paired: {len(properly_paired)} samples")
             
             if raw_reads:
@@ -173,7 +184,7 @@ try:
                             total_reads_all = 0
                             mapped_reads_all = 0
                             for line in map_lines[1:]:
-                                parts = line.strip().split('\t')
+                                parts = line.strip().split('\\t')
                                 if len(parts) >= 5:
                                     try:
                                         total_reads_all += int(parts[1])  # Total_Reads column
@@ -200,6 +211,57 @@ try:
                 
 except Exception as e:
     print(f"Could not read statistics from read summary: {e}")
+
+# Try to get actual read length from MultiQC general stats (FastQC data)
+# Look for the raw_fastqc MultiQC report's general stats
+try:
+    for mqc_file in os.listdir('.'):
+        if mqc_file.startswith('multiqc_raw_fastqc') and mqc_file.endswith('_general_stats.txt'):
+            with open(mqc_file, 'r') as f:
+                lines = f.readlines()
+                if len(lines) > 1:  # Has header and data
+                    header = lines[0].strip().split('\\t')
+                    # Look for sequence length column (FastQC reports this)
+                    for i, col in enumerate(header):
+                        if 'sequence_length' in col.lower() or 'avg_sequence_length' in col.lower():
+                            # Get average from all samples
+                            lengths = []
+                            for line in lines[1:]:
+                                parts = line.strip().split('\\t')
+                                if i < len(parts):
+                                    try:
+                                        # Handle ranges like "150-151" by taking the average
+                                        if '-' in parts[i]:
+                                            range_parts = parts[i].split('-')
+                                            avg_len = (int(range_parts[0]) + int(range_parts[1])) / 2
+                                            lengths.append(avg_len)
+                                        else:
+                                            lengths.append(float(parts[i]))
+                                    except:
+                                        continue
+                            if lengths:
+                                read_length_estimate = int(statistics.mean(lengths))
+                                print(f"Found actual read length from FastQC: {read_length_estimate}")
+                            break
+                    break
+except Exception as e:
+    print(f"Could not extract read length from FastQC data, using default {read_length_estimate}: {e}")
+
+# Calculate total base pairs
+# Note: We multiply by 2 for paired-end reads (R1 + R2)
+total_bases_raw = initial_stats["total"] * read_length_estimate * 2
+total_bases_mapped = final_stats["total"] * read_length_estimate * 2
+
+# Convert to appropriate units (Gbp, Mbp, etc.)
+def format_bases(n_bases):
+    if n_bases >= 1e9:
+        return f"{n_bases/1e9:.2f} Gbp"
+    elif n_bases >= 1e6:
+        return f"{n_bases/1e6:.2f} Mbp"
+    elif n_bases >= 1e3:
+        return f"{n_bases/1e3:.2f} Kbp"
+    else:
+        return f"{n_bases:.0f} bp"
 
 # Find MultiQC reports and sort them
 multiqc_files = [f for f in os.listdir('.') if f.startswith('multiqc_') and f.endswith('.html')]
@@ -260,10 +322,15 @@ markdown_content = f'''# GCL Illumina QC Pipeline Report
 ![Initial Read Distribution](${params.outdir}/qc_analysis/initial_reads_histogram.png)
 
 **Summary Statistics (n={initial_stats["n"]} samples):**
-- Mean reads: {fmt_num(initial_stats["mean"])}
+- Mean reads per sample: {fmt_num(initial_stats["mean"])}
 - Standard deviation: {fmt_num(initial_stats["sd"])}
 - Min reads: {fmt_num(initial_stats["min"])}
 - Max reads: {fmt_num(initial_stats["max"])}
+
+**Total Sequencing Output:**
+- Total read pairs sequenced: {fmt_num(initial_stats["total"])}
+- Total bases sequenced: {format_bases(total_bases_raw)} (assuming {read_length_estimate}bp reads)
+- Total individual reads: {fmt_num(initial_stats["total"] * 2)} (paired-end)
 
 ## Sequencing QC
 
@@ -283,11 +350,16 @@ See [stage_comparison.txt](${params.outdir}/qc_analysis/stage_comparison.txt) fo
 ![Mapped Read Distribution](${params.outdir}/qc_analysis/mapped_reads_histogram.png)
 
 **Summary Statistics (n={final_stats["n"]} samples):**
-- Mean reads: {fmt_num(final_stats["mean"])}
+- Mean reads per sample: {fmt_num(final_stats["mean"])}
 - Standard deviation: {fmt_num(final_stats["sd"])}
 - Min reads: {fmt_num(final_stats["min"])}
 - Max reads: {fmt_num(final_stats["max"])}
 - Overall mapping rate: {final_stats["map_pct"]:.2f}%
+
+**Total Mapped Output:**
+- Total read pairs mapped: {fmt_num(final_stats["total"])}
+- Total bases mapped: {format_bases(total_bases_mapped)} (assuming {read_length_estimate}bp reads)
+- Retention from raw: {(final_stats["total"]/initial_stats["total"]*100):.1f}% of initial read pairs
 
 ### Final Mapping Statistics
 See [${mapping_summary}](${params.outdir}/qc_analysis/${mapping_summary}) for detailed mapping statistics per sample.
@@ -301,6 +373,11 @@ with open("qc_pipeline_report.md", 'w') as f:
     f.write(markdown_content)
 
 print("Markdown report generated successfully!")
+print(f"\\nReport Summary:")
+print(f"  Total read pairs sequenced: {fmt_num(initial_stats['total'])}")
+print(f"  Total bases sequenced: {format_bases(total_bases_raw)}")
+print(f"  Total read pairs mapped: {fmt_num(final_stats['total'])}")
+print(f"  Total bases mapped: {format_bases(total_bases_mapped)}")
 
 # Convert to HTML using pandoc if available
 try:
