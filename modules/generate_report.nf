@@ -24,23 +24,23 @@ process generate_report {
     # Check if mapping was performed
     if [ "${mapping_summary}" == "NO_MAPPING" ]; then
         echo "No mapping performed" > mapping_summary.txt
-        MAPPING_PERFORMED="false"
+        export MAPPING_PERFORMED="false"
     else
-        MAPPING_PERFORMED="true"
+        export MAPPING_PERFORMED="true"
     fi
     
     # Check if assembly stats exist
     if [[ "${assembly_stats}" == *"no_assembly"* ]] || [[ "${assembly_stats}" == *"NO_ASSEMBLY"* ]]; then
-        ASSEMBLY_PERFORMED="false"
+        export ASSEMBLY_PERFORMED="false"
     else
-        ASSEMBLY_PERFORMED="true"
+        export ASSEMBLY_PERFORMED="true"
     fi
     
     # Check if filter stats exist
     if [[ "${filter_stats}" == *"no_filter"* ]] || [[ "${filter_stats}" == *"NO_FILTER"* ]]; then
-        FILTER_PERFORMED="false"
+        export FILTER_PERFORMED="false"
     else
-        FILTER_PERFORMED="true"
+        export FILTER_PERFORMED="true"
     fi
 
     cat <<'PYEOF' > generate_report.py
@@ -62,8 +62,8 @@ reference_line = ""
 assembly_section = ""
 
 # Check if de novo assembly was performed
-assembly_performed = "${ASSEMBLY_PERFORMED}" == "true"
-filter_performed = "${FILTER_PERFORMED}" == "true"
+assembly_performed = os.environ.get("ASSEMBLY_PERFORMED", "false") == "true"
+filter_performed = os.environ.get("FILTER_PERFORMED", "false") == "true"
 
 if genome_source.startswith("denovo:"):
     species_name = ""  # No species name for de novo
