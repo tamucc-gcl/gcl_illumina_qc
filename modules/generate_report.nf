@@ -12,6 +12,8 @@ process generate_report {
         path initial_histogram
         path mapped_histogram
         path mapping_summary
+        path assembly_stats  // New input for assembly statistics
+        path filter_stats    // New input for filtering statistics
         
     output:
         path "qc_pipeline_report.md"
@@ -25,6 +27,14 @@ process generate_report {
         MAPPING_PERFORMED="false"
     else
         MAPPING_PERFORMED="true"
+    fi
+    
+    # Check if assembly stats exist
+    if [ "${assembly_stats}" == "NO_ASSEMBLY" ]; then
+        echo "No assembly performed" > assembly_stats.txt
+        ASSEMBLY_PERFORMED="false"
+    else
+        ASSEMBLY_PERFORMED="true"
     fi
 
     cat <<'PYEOF' > generate_report.py
@@ -43,8 +53,138 @@ genome_source = "${genome_source}"
 # Initialize variables
 species_name = ""
 reference_line = ""
+assembly_section = ""
 
-if genome_source.startswith("accession:"):
+# Check if de novo assembly was performed
+assembly_performed = "${ASSEMBLY_PERFORMED}" == "true"
+
+if genome_source.startswith("denovo:"):
+    species_name = ""  # No species name for de novo
+    
+    # Read assembly statistics if available
+    assembly_info = []
+    
+    if assembly_performed:
+        try:
+            # Read filter stats
+            with open("${filter_stats}", 'r') as f:
+                filter_content = f.read()
+                
+                # Extract filtering parameters
+                cutoff1_match = re.search(r'Cutoff 1.*?: (\d+)', filter_content)
+                cutoff2_match = re.search(r'Cutoff 2.*?: (\d+)', filter_content)
+                total_uniq_match = re.search(r'Total unique sequences: (\d+)', filter_content)
+                after_indiv_match = re.search(r'Sequences after per-individual filter: (\d+)', filter_content)
+                after_count_match = re.search(r'Sequences after individual count filter: (\d+)', filter_content)
+                final_seqs_match = re.search(r'Final sequences for assembly: (\d+)', filter_content)
+                
+                if cutoff1_match and cutoff2_match:
+                    assembly_info.append(f"**Filtering Parameters:**")
+                    assembly_info.append(f"- Minimum reads per individual (cutoff1): {cutoff1_match.group(1)}")
+                    assembly_info.append(f"- Minimum individuals required (cutoff2): {cutoff2_match.group(1)}")
+                    assembly_info.append("")
+                
+                if total_uniq_match:
+                    assembly_info.append(f"**Filtering Statistics:**")
+                    if total_uniq_match:
+                        assembly_info.append(f"- Total unique sequences across all samples: {int(total_uniq_match.group(1)):,}")
+                    if after_indiv_match:
+                        assembly_info.append(f"- Sequences after per-individual filter: {int(after_indiv_match.group(1)):,}")
+                    if after_count_match:
+                        assembly_info.append(f"- Sequences after individual count filter: {int(after_count_match.group(1)):,}")
+                    if final_seqs_match:
+                        assembly_info.append(f"- Final sequences for assembly: {int(final_seqs_match.group(1)):,}")
+                    assembly_info.append("")
+                    
+        except Exception as e:
+            print(f"Could not read filter stats: {e}")
+        
+        try:
+            # Read assembly stats
+            with open("${assembly_stats}", 'r') as f:
+                content = f.read()
+                
+                # Extract assembly parameters
+                cluster_sim_match = re.search(r'Initial clustering: ([\d.]+)', content)
+                div_f_match = re.search(r'Rainbow div -f: ([\d.]+)', content)
+                div_K_match = re.search(r'Rainbow div -K: (\d+)', content)
+                merge_r_match = re.search(r'Rainbow merge -r: (\d+)', content)
+                final_cluster_match = re.search(r'Final clustering: ([\d.]+)', content)
+                
+                if cluster_sim_match:
+                    assembly_info.append(f"**Rainbow Assembly Parameters:**")
+                    assembly_info.append(f"- Initial CD-HIT clustering similarity: {cluster_sim_match.group(1)}")
+                    if div_f_match:
+                        assembly_info.append(f"- Rainbow div -f parameter: {div_f_match.group(1)}")
+                    if div_K_match:
+                        assembly_info.append(f"- Rainbow div -K parameter: {div_K_match.group(1)}")
+                    if merge_r_match:
+                        assembly_info.append(f"- Rainbow merge -r parameter: {merge_r_match.group(1)}")
+                    if final_cluster_match:
+                        assembly_info.append(f"- Final CD-HIT clustering similarity: {final_cluster_match.group(1)}")
+                    assembly_info.append("")
+                
+                # Extract assembly metrics
+                input_seqs_match = re.search(r'Input sequences: (\d+)', content)
+                final_contigs_match = re.search(r'Final reference contigs: (\d+)', content)
+                total_bases_match = re.search(r'Total bases: (\d+)', content)
+                n50_match = re.search(r'N50: (\d+)', content)
+                min_contig_match = re.search(r'Min contig: (\d+)', content)
+                max_contig_match = re.search(r'Max contig: (\d+)', content)
+                mean_contig_match = re.search(r'Mean contig: (\d+)', content)
+                
+                if final_contigs_match:
+                    assembly_info.append(f"**Assembly Metrics:**")
+                    if input_seqs_match:
+                        assembly_info.append(f"- Input sequences to Rainbow: {int(input_seqs_match.group(1)):,}")
+                    if final_contigs_match:
+                        assembly_info.append(f"- Final reference contigs: {int(final_contigs_match.group(1)):,}")
+                    if total_bases_match:
+                        total_bases = int(total_bases_match.group(1))
+                        if total_bases >= 1e9:
+                            assembly_info.append(f"- Total assembly size: {total_bases/1e9:.2f} Gbp")
+                        elif total_bases >= 1e6:
+                            assembly_info.append(f"- Total assembly size: {total_bases/1e6:.2f} Mbp")
+                        else:
+                            assembly_info.append(f"- Total assembly size: {total_bases/1e3:.2f} Kbp")
+                    if n50_match:
+                        assembly_info.append(f"- N50: {int(n50_match.group(1)):,} bp")
+                    if mean_contig_match:
+                        assembly_info.append(f"- Mean contig length: {int(mean_contig_match.group(1)):,} bp")
+                    if min_contig_match and max_contig_match:
+                        assembly_info.append(f"- Contig length range: {int(min_contig_match.group(1)):,} - {int(max_contig_match.group(1)):,} bp")
+                    assembly_info.append("")
+                
+                # Extract contig size distribution
+                dist_10kb = re.search(r'>10kb: (\d+)', content)
+                dist_5_10kb = re.search(r'5-10kb: (\d+)', content)
+                dist_1_5kb = re.search(r'1-5kb: (\d+)', content)
+                dist_500_1kb = re.search(r'500bp-1kb: (\d+)', content)
+                dist_sub500 = re.search(r'<500bp: (\d+)', content)
+                
+                if any([dist_10kb, dist_5_10kb, dist_1_5kb, dist_500_1kb, dist_sub500]):
+                    assembly_info.append(f"**Contig Size Distribution:**")
+                    if dist_10kb:
+                        assembly_info.append(f"- >10kb: {int(dist_10kb.group(1)):,} contigs")
+                    if dist_5_10kb:
+                        assembly_info.append(f"- 5-10kb: {int(dist_5_10kb.group(1)):,} contigs")
+                    if dist_1_5kb:
+                        assembly_info.append(f"- 1-5kb: {int(dist_1_5kb.group(1)):,} contigs")
+                    if dist_500_1kb:
+                        assembly_info.append(f"- 500bp-1kb: {int(dist_500_1kb.group(1)):,} contigs")
+                    if dist_sub500:
+                        assembly_info.append(f"- <500bp: {int(dist_sub500.group(1)):,} contigs")
+                    
+        except Exception as e:
+            print(f"Could not read assembly stats: {e}")
+    
+    if assembly_info:
+        assembly_section = "\\n".join(assembly_info)
+        reference_line = f"## De Novo Assembly\\n\\n{assembly_section}"
+    else:
+        reference_line = "## De Novo Assembly\\n\\nReference genome assembled de novo from cleaned reads using Rainbow pipeline optimized for ddRAD data."
+    
+elif genome_source.startswith("accession:"):
     accession = genome_source.replace("accession:", "")
     
     # Try to fetch species name from NCBI using datasets CLI if available
@@ -81,6 +221,9 @@ elif genome_source.startswith("local:"):
     genome_path = genome_source.replace("local:", "")
     species_name = ""  # Leave blank for local genomes
     reference_line = f"Reference genome used: Local file - `{genome_path}`"
+elif genome_source.startswith("none:"):
+    species_name = ""
+    reference_line = "No reference genome used - cleaned reads output only"
 else:
     species_name = "Unknown"
     reference_line = "Reference genome used: Unknown source"
@@ -286,7 +429,8 @@ stage_names = {
     'fastp_trim_5': "5' Trimming (Fastp)",
     'fastq_screen': 'Contamination Screening',
     'repair': 'Read Repair',
-    'mapping': 'Mapping to Reference'
+    'mapping': 'Mapping to Reference',
+    'mapping_denovo': 'Mapping to De Novo Assembly'
 }
 
 for mqc_file in sorted_multiqc:

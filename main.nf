@@ -27,6 +27,7 @@ params.final_similarity = 0.9
 //--------------------------------------------------------------------
 // WORKFLOW DEFINITION
 //--------------------------------------------------------------------
+
 workflow {
     // Validate genome input parameters
     if (!params.genome && !params.accession && params.assembly_mode == "none") {
@@ -36,6 +37,7 @@ workflow {
     } else if (params.genome && params.accession) {
         log.warn "Warning: Both --genome and --accession specified. Using local genome: ${params.genome}"
     }
+    
     //----------------------------------------------------------------
     // 1. RAW READ INPUT
     //----------------------------------------------------------------
@@ -189,6 +191,10 @@ workflow {
     // 4. GENOME PREPARATION AND MAPPING (branching logic)
     //----------------------------------------------------------------
     
+    // Initialize channels for assembly stats
+    assembly_stats_ch = Channel.value("NO_ASSEMBLY")
+    filter_stats_ch = Channel.value("NO_ASSEMBLY")
+    
     // Branch based on genome availability and assembly mode
     if (params.genome || params.accession) {
         // Option 1: Reference genome provided
@@ -235,6 +241,10 @@ workflow {
         
         // Run de novo assembly using repaired reads
         perform_denovo_assembly( repair.out )
+        
+        // Capture assembly statistics
+        assembly_stats_ch = perform_denovo_assembly.out.assembly_stats
+        filter_stats_ch = perform_denovo_assembly.out.filter_stats
         
         // Use the de novo assembly as reference genome
         log.info "Indexing de novo assembly"
@@ -344,7 +354,7 @@ workflow {
     // Use ifEmpty to provide a default value when no mapping was done
     mapping_summary_for_report = mapping_summary_ch.ifEmpty("NO_MAPPING")
     
-    // Generate final report
+    // Generate final report with assembly stats
     generate_report(
         analyze_read_stats.out[0],  // qc_summary_plot.png
         analyze_read_stats.out[1],  // read_counts_summary.txt
@@ -352,7 +362,9 @@ workflow {
         genome_source,
         analyze_read_stats.out[5],  // initial_reads_histogram.png
         analyze_read_stats.out[6],  // mapped_reads_histogram.png
-        mapping_summary_for_report
+        mapping_summary_for_report,
+        assembly_stats_ch,           // Assembly statistics
+        filter_stats_ch              // Filter statistics
     )
 }
 
