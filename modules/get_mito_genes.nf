@@ -31,13 +31,21 @@ process get_mito_genes {
     #clean-up
     cat concensus_*fas > ${sample_id}_combined.fasta
 
-    #Remove empty sequences
-    awk '
+    #Remove empty sequences & fix headers/remove '-' from sequences
+    awk -v sample="${sample_id}" '
     /^>/ {
         if (seq) {
-        print header
-        print seq
+            # Remove leading and trailing dashes only
+            gsub(/^-+/, "", seq)  # Remove leading dashes
+            gsub(/-+$/, "", seq)  # Remove trailing dashes
+            # Only print if sequence is not empty after trimming
+            if (length(seq) > 0) {
+                print header
+                print seq
+            }
         }
+        # Replace "consensus_" prefix with sample_id in header
+        gsub(/^>consensus_/, ">" sample "_", \$0)
         header = \$0
         seq = ""
         next
@@ -45,8 +53,14 @@ process get_mito_genes {
     { seq = seq \$0 }
     END {
         if (seq) {
-        print header
-        print seq
+            # Remove leading and trailing dashes only
+            gsub(/^-+/, "", seq)  # Remove leading dashes
+            gsub(/-+$/, "", seq)  # Remove trailing dashes
+            # Only print if sequence is not empty after trimming
+            if (length(seq) > 0) {
+                print header
+                print seq
+            }
         }
     }
     ' ${sample_id}_combined.fasta > ${sample_id}_mito_gene.fasta
