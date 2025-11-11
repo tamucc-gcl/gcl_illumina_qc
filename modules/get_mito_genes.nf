@@ -38,11 +38,11 @@ process get_mito_genes {
         print header
         print seq
         }
-        header = $0
+        header = \$0
         seq = ""
         next
     }
-    { seq = seq $0 }
+    { seq = seq \$0 }
     END {
         if (seq) {
         print header
