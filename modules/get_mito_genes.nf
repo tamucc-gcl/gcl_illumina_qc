@@ -4,7 +4,7 @@ process get_mito_genes {
 
     input:
         tuple val(sample_id), path(read1), path(read2)
-        path mito_ref from file(params.mito_gene_refs)   // stages the fasta
+        path(mito_reference)
         val(genetic_code)
 
     output:
