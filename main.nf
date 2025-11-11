@@ -17,7 +17,7 @@ params.outdir      = "results"
 
 // Species ID parameters
 params.run_species_id = true  // Enable/disable species identification
-params.mito_reference = "databases/mito_gene_refs.fasta" // Mitochondrial gene reference provided with gcl_illumina_qc compiled from https://github.com/cmayer/MitoGeneExtractor
+params.mito_reference = "${projectDir}/databases/mito_gene_refs.fasta" // Mitochondrial gene reference provided with gcl_illumina_qc compiled from https://github.com/cmayer/MitoGeneExtractor
 params.genetic_code = 2  //Mitochondrial genetic code: https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi
 params.blast_db = null  // Path to local BLAST database (null = use NCBI nt)
 
