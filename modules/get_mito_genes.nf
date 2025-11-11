@@ -55,7 +55,7 @@ process get_mito_genes {
         if (seq) {
             # Remove leading and trailing dashes only
             gsub(/^-+/, "", seq)  # Remove leading dashes
-            gsub(/-+$/, "", seq)  # Remove trailing dashes
+            gsub(/-+\$/, "", seq)  # Remove trailing dashes
             # Only print if sequence is not empty after trimming
             if (length(seq) > 0) {
                 print header
