@@ -45,7 +45,7 @@ process get_mito_genes {
             }
         }
         # Replace "consensus_" prefix with sample_id in header
-        gsub(/^>consensus_/, ">" sample "_", \$0)
+        gsub(/^>Consensus_/, ">" sample "_", \$0)
         header = \$0
         seq = ""
         next
