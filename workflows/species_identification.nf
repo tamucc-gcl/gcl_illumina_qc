@@ -24,6 +24,7 @@ workflow species_identification {
             params.genetic_code
         )
         
+        /*
         // Step 2: BLAST extracted mitochondrial genes
         // Create channel for BLAST database (could be local or remote)
         blast_db = params.blast_db 
@@ -61,11 +62,13 @@ workflow species_identification {
         summarize_species_id.out.report.view { 
             "Species identification completed. Report saved: $it" 
         }
-    
+    */
     emit:
         mito_genes = get_mito_genes.out
+        /*
         blast_results = blast_mito_genes.out.blast_results
         species_report = summarize_species_id.out.report
         species_consensus = summarize_species_id.out.consensus
         species_stats = summarize_species_id.out.stats
+        */
 }
