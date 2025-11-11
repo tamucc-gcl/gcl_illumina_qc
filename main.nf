@@ -15,6 +15,12 @@ params.decontam_conffile    = "/work/birdlab/fastq_screen_databases/example_fast
 params.sequencing_type = "whole_genome"  // Options: "ddrad" or "whole_genome"
 params.outdir      = "results"
 
+// Species ID parameters
+params.run_species_id = true  // Enable/disable species identification
+params.mito_reference = "databases/mito_gene_refs.fasta" // Mitochondrial gene reference provided with gcl_illumina_qc compiled from https://github.com/cmayer/MitoGeneExtractor
+params.genetic_code = 2  //Mitochondrial genetic code: https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi
+params.blast_db = null  // Path to local BLAST database (null = use NCBI nt)
+
 // Assembly parameters
 params.cutoff1 = 4          // Minimum reads per individual
 params.cutoff2 = 4          // Minimum number of individuals  
@@ -246,15 +252,15 @@ workflow {
         log.info "Performing de novo assembly from cleaned reads"
         
         // Run de novo assembly using repaired reads
-        perform_denovo_assembly( repair.out )
+        denovo_assembly( repair.out )
         
         // Capture assembly statistics
-        assembly_stats_ch = perform_denovo_assembly.out.assembly_stats
-        filter_stats_ch = perform_denovo_assembly.out.filter_stats
+        assembly_stats_ch = denovo_assembly.out.assembly_stats
+        filter_stats_ch = denovo_assembly.out.filter_stats
         
         // Use the de novo assembly as reference genome
         log.info "Indexing de novo assembly"
-        prepare_genome_local( perform_denovo_assembly.out.reference )
+        prepare_genome_local( denovo_assembly.out.reference )
         genome_indexed = prepare_genome_local.out.genome
         
         // Map reads to de novo assembly
@@ -303,6 +309,25 @@ workflow {
             file("NO_FILTER").text = "No filtering performed"
             return file("NO_FILTER")
         }
+    }
+
+    //----------------------------------------------------------------
+    // 3b. SPECIES IDENTIFICATION (Optional)
+    //----------------------------------------------------------------
+    if (params.run_species_id) {
+        log.info "Running species identification workflow"
+        
+        // Extract reads after 5' trimming for species ID
+        species_id_input = fastp_trim_5.out
+            .map{ sid, r1, r2, json, html -> tuple(sid, r1, r2) }
+        
+        // Run species identification subworkflow
+        species_identification(species_id_input)
+        
+        // The results are available in:
+        // - species_identification.out.species_report
+        // - species_identification.out.species_consensus
+        // - species_identification.out.species_stats
     }
     
     //----------------------------------------------------------------
@@ -441,45 +466,10 @@ workflow prepare_genome_local {
 }
 
 //--------------------------------------------------------------------
-// SUB‑WORKFLOW: de novo assemble genome from ddrad: https://ddocent.com/assembly/
+// MODULE WORKFLOWS
 //--------------------------------------------------------------------
-workflow perform_denovo_assembly {
-    take:
-        cleaned_reads
-    
-    main:
-        // Step 1: Extract unique sequences for each sample
-        extract_unique_seqs( cleaned_reads )
-        
-        // Step 2: Collect all unique sequence files and filter
-        all_uniq_seqs = extract_unique_seqs.out.uniq_seqs
-            .map{ sid, file -> file }
-            .collect()
-        
-        filter_unique_seqs( 
-            all_uniq_seqs,
-            params.cutoff1,
-            params.cutoff2
-        )
-        
-        // Step 3: Perform Rainbow assembly
-        assemble_rainbow(
-            filter_unique_seqs.out.filtered_fasta,
-            filter_unique_seqs.out.totaluniqseq,
-            params.cluster_similarity,
-            params.div_f,
-            params.div_K,
-            params.merge_r,
-            params.final_similarity
-        )
-        
-    emit:
-        reference = assemble_rainbow.out.reference
-        assembly_stats = assemble_rainbow.out.stats
-        filter_stats = filter_unique_seqs.out.stats
-    
-}
-
+include { species_identification } from './workflows/species_identification.nf'
+include { denovo_assembly.nf } from './workflows/denovo_assembly.nf'
 
 //--------------------------------------------------------------------
 // MODULE IMPORTS
@@ -503,6 +493,11 @@ include { output_cleaned_reads } from './modules/output_cleaned_reads.nf'
 include { extract_unique_seqs } from './modules/extract_unique_seqs.nf'
 include { filter_unique_seqs } from './modules/filter_unique_seqs.nf'
 include { assemble_rainbow } from './modules/assemble_rainbow.nf'
+
+// species id modules
+include { get_mito_genes } from './modules/get_mito_genes.nf'
+include { blast_mito_genes } from './modules/blast_mito_genes.nf'
+include { summarize_species_id } from './modules/summarize_species_id.nf'
 
 include { fastqc_raw }        from './modules/fastqc.nf'
 include { fastqc_generic as fastqc_trim3 }    from './modules/fastqc.nf'
