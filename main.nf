@@ -469,7 +469,7 @@ workflow prepare_genome_local {
 // MODULE WORKFLOWS
 //--------------------------------------------------------------------
 include { species_identification } from './workflows/species_identification.nf'
-include { denovo_assembly.nf } from './workflows/denovo_assembly.nf'
+include { denovo_assembly } from './workflows/denovo_assembly.nf'
 
 //--------------------------------------------------------------------
 // MODULE IMPORTS
