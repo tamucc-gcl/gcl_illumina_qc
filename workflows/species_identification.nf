@@ -34,27 +34,23 @@ workflow species_identification {
             blast_db
         )
         
-        /*
+        
         // Step 3: Collect all results and generate summary
         // Collect all BLAST results
         all_blast_results = blast_mito_genes.out.blast_results
             .map{ sid, file -> file }
             .collect()
-        
-        // Collect all BLAST summaries
-        all_blast_summaries = blast_mito_genes.out.blast_summary
-            .collect()
-        
+
+        /*
         // Collect all mitochondrial gene files
         all_mito_genes = get_mito_genes.out
             .map{ sid, file -> file }
             .collect()
+        */
         
         // Generate comprehensive species identification summary
         summarize_species_id(
-            all_blast_results,
-            all_blast_summaries,
-            all_mito_genes
+            all_blast_results
         )
         
         // Log completion
