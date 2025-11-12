@@ -7,13 +7,13 @@ process blast_mito_genes {
     
     input:
         tuple val(sample_id), path(mito_genes_fasta)
-        path(blast_db)  // Path to BLAST database (or could be a string for remote DB)
+        val(blast_db)  // Path to BLAST database (or could be a string for remote DB)
     
     output:
         tuple val(sample_id), path("${sample_id}.blast_results.txt"), emit: blast_results
     
     script:
-    def blast_dir = blast_db.parent ?: '.'
+    def blast_dir = blast_db.substring(0, blast_db.lastIndexOf('/'))
     """
     export BLASTDB="${blast_dir}"    #this makes it so the taxonomy database is properly associated
     blastn -query ${mito_genes_fasta} \
