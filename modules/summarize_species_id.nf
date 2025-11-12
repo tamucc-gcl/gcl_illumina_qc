@@ -17,18 +17,18 @@ process summarize_species_id {
     echo "Combining BLAST results from all samples..."
     
     # Create header for combined file
-    echo -e "sample_id\tqseqid\tsseqid\tpident\tlength\tmismatch\tgapopen\tqstart\tqend\tsstart\tsend\tevalue\tbitscore\tstaxids\tsscinames" > combined_blast_results.tsv
-    
-    # Process each BLAST result file
-    for blast_file in *.blast_results.txt; do
-        if [ -f "\$blast_file" ]; then
-            # Extract sample name from filename (remove .blast_results.txt extension)
-            sample=\$(basename "\$blast_file" .blast_results.txt)
-            
-            # Add sample ID as first column to each line and append to combined file
-            awk -v sample="\$sample" 'BEGIN {OFS="\\t"} {print sample, \$0}' "\$blast_file" >> combined_blast_results.tsv
-            
-            echo "  Added results from sample: \$sample"
+    echo -e "sample_id\tqseqid\tsseqid\tpident\tlength\tmismatch\tgapopen\tqstart\tqend\tsstart\tsend\tevalue\tbitscore\tstaxids\tsscinames\tkingdom\tphylum\tclass\torder\tfamily\tgenus\tspecies" > combined_blast_results.tsv
+
+    # Process each BLAST result file (e.g., *.blast_with_taxa.header.tsv)
+    for blast_file in *.blast_with_taxa*.tsv; do
+        if [ -f "$blast_file" ]; then
+            # Extract sample name (everything before .blast)
+            sample=$(basename "$blast_file" | sed 's/\.blast.*//')
+
+            # Skip header lines if present and prepend sample ID
+            awk -v sample="$sample" -F'\t' 'BEGIN {OFS="\t"} NR>1 {print sample, $0}' "$blast_file" >> combined_blast_results.tsv
+
+            echo "  Added results from sample: $sample"
         fi
     done
     
