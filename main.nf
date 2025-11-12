@@ -1,7 +1,7 @@
 // main.nf – GCL Illumina QC pipeline
 // July 2025 – consolidated MultiQC per step
 // Oct 2025 - implement local genome option
-// Nov 2025 - add de novo assembly option
+// Nov 2025 - add de novo assembly & species ID options
 
 nextflow.enable.dsl = 2
 
