@@ -13,8 +13,9 @@ process blast_mito_genes {
         tuple val(sample_id), path("${sample_id}.blast_results.txt"), emit: blast_results
     
     script:
+    def blast_dir = blast_db.parent ?: '.'
     """
-    export BLASTDB=\$(dirname "${blast_db}")    #this makes it so the taxonomy database is properly associated
+    export BLASTDB="${blast_dir}"    #this makes it so the taxonomy database is properly associated
     blastn -query ${mito_genes_fasta} \
            -db ${blast_db} \
            -out ${sample_id}.blast_results.txt \
