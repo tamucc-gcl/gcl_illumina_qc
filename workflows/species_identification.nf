@@ -52,11 +52,6 @@ workflow species_identification {
         summarize_species_id(
             all_blast_results
         )
-        
-        // Log completion
-        summarize_species_id.out.report.view { 
-            "Species identification completed. Report saved: $it" 
-        }
     
     emit:
         mito_genes = get_mito_genes.out
