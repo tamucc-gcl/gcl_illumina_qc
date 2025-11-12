@@ -24,18 +24,18 @@ workflow species_identification {
             params.genetic_code
         )
         
-        /*
+        
         // Step 2: BLAST extracted mitochondrial genes
         // Create channel for BLAST database (could be local or remote)
         blast_db = params.blast_db 
             ? Channel.value(file(params.blast_db))
-            : Channel.value("nt")  // Use NCBI nt database as default
         
         blast_mito_genes(
             get_mito_genes.out,
             blast_db
         )
         
+        /*
         // Step 3: Collect all results and generate summary
         // Collect all BLAST results
         all_blast_results = blast_mito_genes.out.blast_results
