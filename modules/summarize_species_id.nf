@@ -20,7 +20,7 @@ process summarize_species_id {
     echo -e "sample_id\tqseqid\tsseqid\tpident\tlength\tmismatch\tgapopen\tqstart\tqend\tsstart\tsend\tevalue\tbitscore\tstaxids\tsscinames\tkingdom\tphylum\tclass\torder\tfamily\tgenus\tspecies" > combined_blast_results.tsv
 
     # Process each BLAST result file (e.g., *.blast_with_taxa.header.tsv)
-    for blast_file in *.blast_with_taxa*.tsv; do
+    for blast_file in ${blast_results}; do
         if [ -f "$blast_file" ]; then
             # Extract sample name (everything before .blast)
             sample=$(basename "$blast_file" | sed 's/\.blast.*//')
