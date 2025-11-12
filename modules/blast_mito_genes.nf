@@ -14,7 +14,7 @@ process blast_mito_genes {
     
     script:
     """
-    export BLASTDB=$(dirname "${blast_db}")    #this makes it so the taxonomy database is properly associated
+    export BLASTDB=\$(dirname "${blast_db}")    #this makes it so the taxonomy database is properly associated
     blastn -query ${mito_genes_fasta} \
            -db ${blast_db} \
            -out ${sample_id}.blast_results.txt \
