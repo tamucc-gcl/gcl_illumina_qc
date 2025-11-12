@@ -29,7 +29,7 @@ process blast_mito_genes {
     export TAXONKIT_DB="${taxonomy_db}"
     cut -f13 "${sample_id}.blast_raw.txt" \
     | sed 's/;.*//' \
-    | taxonkit reformat -I 1 -r NA -f $'{K}\t{p}\t{c}\t{o}\t{f}\t{g}\t{s}' \
+    | taxonkit reformat -I 1 -r NA -f \$'{K}\t{p}\t{c}\t{o}\t{f}\t{g}\t{s}' \
     | cut -f2- \
     > "${sample_id}.taxonkit.tsv"
     #            ^^^^^^
