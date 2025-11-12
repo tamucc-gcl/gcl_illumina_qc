@@ -3,7 +3,7 @@ process blast_mito_genes {
     label 'blast_mito'
     tag "$sample_id"
     
-    publishDir "${params.outdir}/species_id/blast_results", mode: 'copy', pattern: "*.blast_results.txt"
+    //publishDir "${params.outdir}/species_id/blast_results", mode: 'copy', pattern: "*.blast_results.txt"
     
     input:
         tuple val(sample_id), path(mito_genes_fasta)
