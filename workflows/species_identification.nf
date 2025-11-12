@@ -57,7 +57,7 @@ workflow species_identification {
     
     emit:
         mito_genes = get_mito_genes.out
-        blast_results = blast_mito_genes.out.blast_results
+        blast_results = summarize_species_id.out.combined_blast
         /*
         species_report = summarize_species_id.out.report
         species_consensus = summarize_species_id.out.consensus
