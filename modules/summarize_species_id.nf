@@ -17,21 +17,28 @@ process summarize_species_id {
     echo "Combining BLAST results from all samples..."
     
     # Create header for combined file
-    echo -e "sample_id\tqseqid\tsseqid\tpident\tlength\tmismatch\tgapopen\tqstart\tqend\tsstart\tsend\tevalue\tbitscore\tstaxids\tsscinames\tkingdom\tphylum\tclass\torder\tfamily\tgenus\tspecies" > combined_blast_results.tsv
+    echo -e "sample_id\\tqseqid\\tsseqid\\tpident\\tlength\\tmismatch\\tgapopen\\tqstart\\tqend\\tsstart\\tsend\\tevalue\\tbitscore\\tstaxids\\tsscinames\\tkingdom\\tphylum\\tclass\\torder\\tfamily\\tgenus\\tspecies" > combined_blast_results.tsv
 
-    # Process each BLAST result file (e.g., *.blast_with_taxa.header.tsv)
-    # Input files are staged in working directory
+    # Process each BLAST result file
+    # When multiple files are passed, they're in the current directory
     for blast_file in *.blast_results.txt; do
         if [ -f "\${blast_file}" ]; then
-            # Extract sample name (everything before .blast)
-            sample=\$(basename "\${blast_file}" | sed 's/\.blast.*//')
+            # Extract sample name (everything before .blast_results.txt)
+            sample=\$(basename "\${blast_file}" .blast_results.txt)
 
             # Skip header lines if present and prepend sample ID
-            awk -v sample="\${sample}" -F'\t' 'BEGIN {OFS="\t"} NR>1 {print sample, \$0}' "\$blast_file" >> combined_blast_results.tsv
+            awk -v sample="\${sample}" -F'\\t' 'BEGIN {OFS="\\t"} NR>1 {print sample, \$0}' "\${blast_file}" >> combined_blast_results.tsv
 
-            echo "  Added results from sample: \$sample"
+            echo "  Added results from sample: \${sample}"
         fi
     done
+    
+    # Check if any files were processed
+    if [ ! -s combined_blast_results.tsv ] || [ \$(wc -l < combined_blast_results.tsv) -eq 1 ]; then
+        echo "Warning: No BLAST results were found or processed"
+        echo "Files in directory:"
+        ls -la
+    fi
     
     # Report summary
     total_hits=\$(tail -n +2 combined_blast_results.tsv | wc -l)
