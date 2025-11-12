@@ -21,14 +21,14 @@ process summarize_species_id {
 
     # Process each BLAST result file (e.g., *.blast_with_taxa.header.tsv)
     for blast_file in ${blast_results}; do
-        if [ -f "$blast_file" ]; then
+        if [ -f "\${blast_file}" ]; then
             # Extract sample name (everything before .blast)
-            sample=$(basename "$blast_file" | sed 's/\.blast.*//')
+            sample=\$(basename "\${blast_file}" | sed 's/\.blast.*//')
 
             # Skip header lines if present and prepend sample ID
-            awk -v sample="$sample" -F'\t' 'BEGIN {OFS="\t"} NR>1 {print sample, $0}' "$blast_file" >> combined_blast_results.tsv
+            awk -v sample="\${sample}" -F'\t' 'BEGIN {OFS="\t"} NR>1 {print sample, \$0}' "\$blast_file" >> combined_blast_results.tsv
 
-            echo "  Added results from sample: $sample"
+            echo "  Added results from sample: \$sample"
         fi
     done
     
