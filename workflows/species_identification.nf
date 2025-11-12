@@ -28,7 +28,7 @@ workflow species_identification {
         // Step 2: BLAST extracted mitochondrial genes
         // Create channel for BLAST database
         blast_db = Channel.value(params.blast_db)
-        taxonomy_db = Channel.value(params.taxonomy_db )
+        taxonomy_db = Channel.value(params.taxonomy_db)
         
         blast_mito_genes(
             get_mito_genes.out,
