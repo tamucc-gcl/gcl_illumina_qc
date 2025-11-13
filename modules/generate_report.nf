@@ -14,6 +14,10 @@ process generate_report {
         path mapping_summary
         path assembly_stats  // New input for assembly statistics
         path filter_stats    // New input for filtering statistics
+        path species_blast_tsv    // New: BLAST results TSV
+        path species_raw_pie      // New: Raw BLAST pie chart
+        path species_summary_pie  // New: Summary BLAST pie chart
+        path species_top_hits     // New: Top BLAST hits CSV
         
     output:
         path "qc_pipeline_report.md"
@@ -42,6 +46,13 @@ process generate_report {
     else
         export FILTER_PERFORMED="true"
     fi
+    
+    # Check if species ID was performed
+    if [[ "${species_blast_tsv}" == *"NO_SPECIES"* ]] || [[ "${species_blast_tsv}" == *"no_species"* ]]; then
+        export SPECIES_ID_PERFORMED="false"
+    else
+        export SPECIES_ID_PERFORMED="true"
+    fi
 
     cat <<'PYEOF' > generate_report.py
 #!/usr/bin/env python3
@@ -52,6 +63,7 @@ import os
 import subprocess
 import math
 from pathlib import Path
+import pandas as pd
 
 # Parse genome source
 genome_source = "${genome_source}"
@@ -64,6 +76,7 @@ assembly_section = ""
 # Check if de novo assembly was performed
 assembly_performed = os.environ.get("ASSEMBLY_PERFORMED", "false") == "true"
 filter_performed = os.environ.get("FILTER_PERFORMED", "false") == "true"
+species_id_performed = os.environ.get("SPECIES_ID_PERFORMED", "false") == "true"
 
 if genome_source.startswith("denovo:"):
     species_name = ""  # No species name for de novo
@@ -447,6 +460,68 @@ for mqc_file in sorted_multiqc:
             multiqc_links.append(f"- [{name}](${params.outdir}/multiqc_reports/{mqc_file})")
             break
 
+# Process species identification results if available
+species_id_section = ""
+if species_id_performed:
+    try:
+        # Read top hits CSV to get species identification summary
+        df = pd.read_csv("${species_top_hits}")
+        
+        if not df.empty:
+            # Get the most likely species across samples
+            species_counts = {}
+            for col in ['kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species']:
+                if col in df.columns:
+                    # Count occurrences of each taxon at this level
+                    counts = df[col].value_counts()
+                    if not counts.empty:
+                        species_counts[col] = counts.iloc[0]  # Most common taxon
+            
+            species_id_section = "## Species Identification (BLAST Analysis)\\n\\n"
+            
+            # Add identified species information
+            if species_counts:
+                species_id_section += "**Taxonomic Classification (Most Likely):**\\n"
+                for level, taxon in species_counts.items():
+                    if pd.notna(taxon) and taxon != '':
+                        species_id_section += f"- {level.capitalize()}: {taxon}\\n"
+                species_id_section += "\\n"
+            
+            # Add sample-level summary
+            n_samples = len(df)
+            species_id_section += f"**Sample Summary:**\\n"
+            species_id_section += f"- Number of samples analyzed: {n_samples}\\n"
+            
+            # Count how many samples agreed on species
+            if 'species' in df.columns:
+                species_agreement = df['species'].value_counts()
+                if not species_agreement.empty:
+                    top_species = species_agreement.iloc[0]
+                    n_agree = species_agreement.iloc[0]
+                    species_id_section += f"- Samples with consensus species: {n_agree}/{n_samples} ({n_agree/n_samples*100:.1f}%)\\n"
+            
+            species_id_section += "\\n"
+            
+            # Add visualization section
+            species_id_section += "### BLAST Hit Distributions\\n\\n"
+            species_id_section += "#### Raw BLAST Results by Taxonomic Level\\n"
+            species_id_section += "![Raw BLAST Pie Charts](${params.outdir}/species_id/blast_raw_pie.png)\\n\\n"
+            
+            species_id_section += "#### Summarized Species Identification\\n"
+            species_id_section += "![Summary BLAST Pie Charts](${params.outdir}/species_id/blast_summary_pie.png)\\n\\n"
+            
+            # Add links to detailed results
+            species_id_section += "### Detailed Results\\n\\n"
+            species_id_section += "- [Combined BLAST results (TSV)](${params.outdir}/species_id/blast_results.tsv)\\n"
+            species_id_section += "- [Top BLAST hits per sample (CSV)](${params.outdir}/species_id/top_blast_hits.csv)\\n"
+            species_id_section += "- [Posterior probabilities by taxonomic level](${params.outdir}/species_id/blast_posteriors/)\\n"
+            
+    except Exception as e:
+        print(f"Could not process species identification results: {e}")
+        species_id_section = "## Species Identification\\n\\nSpecies identification was run but results could not be processed.\\n"
+else:
+    print("Species identification was not performed or no results available")
+
 # Format numbers with thousands separator
 def fmt_num(n):
     return f"{n:,.0f}"
@@ -515,6 +590,8 @@ See [stage_comparison.txt](${params.outdir}/qc_analysis/stage_comparison.txt) fo
 ### Final Mapping Statistics
 See [${mapping_summary}](${params.outdir}/qc_analysis/${mapping_summary}) for detailed mapping statistics per sample.
 
+{species_id_section}
+
 ---
 *QC Report generated on: {subprocess.check_output(['date']).decode().strip()}*
 '''
@@ -529,6 +606,8 @@ print(f"  Total read pairs sequenced: {fmt_num(initial_stats['total'])}")
 print(f"  Total bases sequenced: {format_bases(total_bases_raw)}")
 print(f"  Total read pairs mapped: {fmt_num(final_stats['total'])}")
 print(f"  Total bases mapped: {format_bases(total_bases_mapped)}")
+if species_id_performed:
+    print(f"  Species identification: Completed")
 
 # Convert to HTML using pandoc if available
 try:

@@ -325,11 +325,32 @@ workflow {
         // Run species identification subworkflow
         species_identification(species_id_input)
         
-        // The results are available in:
-        // - species_identification.out.species_report
-        // - species_identification.out.species_consensus
-        // - species_identification.out.species_stats
+        // Capture outputs for report
+        species_blast_tsv = species_identification.out.combined_blast
+        species_raw_pie = species_identification.out.raw_pie_chart
+        species_summary_pie = species_identification.out.summary_pie_chart
+        species_top_hits = species_identification.out.top_hits
+        
+    } else {
+        // Create empty channels for species ID outputs
+        species_blast_tsv = Channel.fromPath("$projectDir/NO_SPECIES", checkIfExists: false).ifEmpty { 
+            file("NO_SPECIES").text = "No species identification performed"
+            return file("NO_SPECIES")
+        }
+        species_raw_pie = Channel.fromPath("$projectDir/NO_SPECIES_PIE", checkIfExists: false).ifEmpty { 
+            file("NO_SPECIES_PIE").text = "No species identification performed"
+            return file("NO_SPECIES_PIE")
+        }
+        species_summary_pie = Channel.fromPath("$projectDir/NO_SPECIES_SUMMARY", checkIfExists: false).ifEmpty { 
+            file("NO_SPECIES_SUMMARY").text = "No species identification performed"
+            return file("NO_SPECIES_SUMMARY")
+        }
+        species_top_hits = Channel.fromPath("$projectDir/NO_SPECIES_HITS", checkIfExists: false).ifEmpty { 
+            file("NO_SPECIES_HITS").text = "No species identification performed"
+            return file("NO_SPECIES_HITS")
+        }
     }
+    
     
     //----------------------------------------------------------------
     // 5. COLLECT STATS AND GENERATE REPORT
@@ -372,15 +393,23 @@ workflow {
     //----------------------------------------------------------------
     
     // Create a simple process to generate placeholder files when needed
-    process create_assembly_placeholders {
+    process create_placeholders {
         output:
             path "no_assembly_stats.txt"
             path "no_filter_stats.txt"
+            path "no_species_blast.txt"
+            path "no_species_raw_pie.png"
+            path "no_species_summary_pie.png"
+            path "no_species_top_hits.csv"
         
         script:
         """
         echo "No assembly performed" > no_assembly_stats.txt
         echo "No filtering performed" > no_filter_stats.txt
+        echo "No species identification performed" > no_species_blast.txt
+        echo "No species identification performed" > no_species_raw_pie.png
+        echo "No species identification performed" > no_species_summary_pie.png
+        echo "No species identification performed" > no_species_top_hits.csv
         """
     }
     
@@ -414,12 +443,34 @@ workflow {
         final_assembly_stats = assembly_stats_ch
         final_filter_stats = filter_stats_ch
     } else {
-        placeholder_outputs = create_assembly_placeholders()
+        placeholder_outputs = create_placeholders()
         final_assembly_stats = placeholder_outputs[0]
         final_filter_stats = placeholder_outputs[1]
     }
     
-    // Generate final report with assembly stats
+    // Handle species ID outputs - use actual outputs or placeholders
+    if (params.run_species_id) {
+        final_species_blast = species_blast_tsv
+        final_species_raw_pie = species_raw_pie
+        final_species_summary_pie = species_summary_pie
+        final_species_top_hits = species_top_hits
+    } else {
+        if (params.assembly_mode != "denovo") {
+            placeholder_outputs = create_placeholders()
+            final_species_blast = placeholder_outputs[2]
+            final_species_raw_pie = placeholder_outputs[3]
+            final_species_summary_pie = placeholder_outputs[4]
+            final_species_top_hits = placeholder_outputs[5]
+        } else {
+            // If already created placeholders for assembly, reuse them
+            final_species_blast = placeholder_outputs[2]
+            final_species_raw_pie = placeholder_outputs[3]
+            final_species_summary_pie = placeholder_outputs[4]
+            final_species_top_hits = placeholder_outputs[5]
+        }
+    }
+    
+    // Generate final report with assembly stats and species ID
     generate_report(
         analyze_read_stats.out[0],  // qc_summary_plot.png
         analyze_read_stats.out[1],  // read_counts_summary.txt
@@ -429,7 +480,11 @@ workflow {
         analyze_read_stats.out[6],  // mapped_reads_histogram.png
         mapping_summary_for_report,
         final_assembly_stats,        // Assembly statistics (actual or placeholder)
-        final_filter_stats           // Filter statistics (actual or placeholder)
+        final_filter_stats,          // Filter statistics (actual or placeholder)
+        final_species_blast,         // BLAST results TSV
+        final_species_raw_pie,       // Raw BLAST pie chart
+        final_species_summary_pie,   // Summary BLAST pie chart
+        final_species_top_hits       // Top BLAST hits CSV
     )
 }
 

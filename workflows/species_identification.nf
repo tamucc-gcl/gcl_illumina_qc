@@ -1,65 +1,39 @@
 // workflows/species_identification.nf
-// Species identification subworkflow using mitochondrial gene extraction and BLAST
-
-nextflow.enable.dsl = 2
-
-// Import necessary modules
-include { get_mito_genes } from '../modules/get_mito_genes.nf'
-include { blast_mito_genes } from '../modules/blast_mito_genes.nf'
-include { summarize_species_id } from '../modules/summarize_species_id.nf'
-
 workflow species_identification {
     take:
-        fastp_trim5_reads  // Channel of tuples: [sample_id, read1, read2] from fastp_trim_5
+        reads_ch  // Channel of tuple(sample_id, read1, read2)
     
     main:
-        // Log the start of species identification
-        log.info "Starting species identification workflow"
-        
-        // Step 1: Extract mitochondrial genes from each sample
-        // Process each sample independently
+        // Extract mitochondrial genes from reads
         get_mito_genes(
-            fastp_trim5_reads,
-            file(params.mito_reference),
-            params.genetic_code
+            reads_ch,
+            Channel.value(file(params.mito_reference)),
+            Channel.value(params.genetic_code)
         )
         
-        
-        // Step 2: BLAST extracted mitochondrial genes
-        // Create channel for BLAST database
-        blast_db = Channel.value(params.blast_db)
-        taxonomy_db = Channel.value(params.taxonomy_db)
-        
+        // BLAST mitochondrial genes
         blast_mito_genes(
             get_mito_genes.out,
-            blast_db,
-            taxonomy_db
+            Channel.value(params.blast_db),
+            Channel.value(params.taxonomy_db)
         )
         
-        
-        // Step 3: Collect all results and generate summary
-        // Collect all BLAST results
+        // Collect all BLAST results for summary
         all_blast_results = blast_mito_genes.out.blast_results
-            .map{ sid, file -> file }
+            .map{ sid, blast_file -> blast_file }
             .collect()
-
-        /*
-        // Collect all mitochondrial gene files
-        all_mito_genes = get_mito_genes.out
-            .map{ sid, file -> file }
-            .collect()
-        */
         
-        // Generate comprehensive species identification summary
-        summarize_species_id(
-            all_blast_results
-        )
+        // Summarize species identification across all samples
+        summarize_species_id(all_blast_results)
     
     emit:
-        mito_genes = get_mito_genes.out
-        blast_results = summarize_species_id.out.combined_blast
+        // Individual sample results
+        blast_results = blast_mito_genes.out.blast_results
+        
+        // Summary outputs from summarize_species_id
+        combined_blast = summarize_species_id.out.combined_blast
         raw_pie_chart = summarize_species_id.out.raw_pie_chart
         summary_pie_chart = summarize_species_id.out.summary_pie_chart
-        blast_top_hits = summarize_species_id.out.top_hits
-        blast_posteriors = summarize_species_id.out.posteriors
+        top_hits = summarize_species_id.out.top_hits
+        posteriors = summarize_species_id.out.posteriors
 }
