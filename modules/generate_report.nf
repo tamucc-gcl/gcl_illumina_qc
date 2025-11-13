@@ -63,7 +63,6 @@ import os
 import subprocess
 import math
 from pathlib import Path
-import pandas as pd
 
 # Parse genome source
 genome_source = "${genome_source}"
@@ -464,18 +463,28 @@ for mqc_file in sorted_multiqc:
 species_id_section = ""
 if species_id_performed:
     try:
-        # Read top hits CSV to get species identification summary
-        df = pd.read_csv("${species_top_hits}")
+        import csv
+        from collections import Counter
         
-        if not df.empty:
+        # Read top hits CSV to get species identification summary
+        with open("${species_top_hits}", 'r') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        
+        if rows:
             # Get the most likely species across samples
             species_counts = {}
-            for col in ['kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species']:
-                if col in df.columns:
+            taxonomic_levels = ['kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species']
+            
+            for col in taxonomic_levels:
+                if col in rows[0]:  # Check if column exists
                     # Count occurrences of each taxon at this level
-                    counts = df[col].value_counts()
-                    if not counts.empty:
-                        species_counts[col] = counts.iloc[0]  # Most common taxon
+                    values = [row[col] for row in rows if row.get(col) and row[col].strip()]
+                    if values:
+                        counter = Counter(values)
+                        most_common = counter.most_common(1)
+                        if most_common:
+                            species_counts[col] = most_common[0][0]
             
             species_id_section = "## Species Identification (BLAST Analysis)\\n\\n"
             
@@ -483,22 +492,25 @@ if species_id_performed:
             if species_counts:
                 species_id_section += "**Taxonomic Classification (Most Likely):**\\n"
                 for level, taxon in species_counts.items():
-                    if pd.notna(taxon) and taxon != '':
+                    if taxon and taxon != '':
                         species_id_section += f"- {level.capitalize()}: {taxon}\\n"
                 species_id_section += "\\n"
             
             # Add sample-level summary
-            n_samples = len(df)
+            n_samples = len(rows)
             species_id_section += f"**Sample Summary:**\\n"
             species_id_section += f"- Number of samples analyzed: {n_samples}\\n"
             
             # Count how many samples agreed on species
-            if 'species' in df.columns:
-                species_agreement = df['species'].value_counts()
-                if not species_agreement.empty:
-                    top_species = species_agreement.iloc[0]
-                    n_agree = species_agreement.iloc[0]
-                    species_id_section += f"- Samples with consensus species: {n_agree}/{n_samples} ({n_agree/n_samples*100:.1f}%)\\n"
+            if 'species' in rows[0]:
+                species_values = [row.get('species', '') for row in rows if row.get('species', '').strip()]
+                if species_values:
+                    species_counter = Counter(species_values)
+                    most_common_species = species_counter.most_common(1)
+                    if most_common_species:
+                        top_species = most_common_species[0][0]
+                        n_agree = most_common_species[0][1]
+                        species_id_section += f"- Samples with consensus species: {n_agree}/{n_samples} ({n_agree/n_samples*100:.1f}%)\\n"
             
             species_id_section += "\\n"
             
