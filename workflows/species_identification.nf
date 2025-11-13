@@ -58,9 +58,8 @@ workflow species_identification {
     emit:
         mito_genes = get_mito_genes.out
         blast_results = summarize_species_id.out.combined_blast
-        /*
-        species_report = summarize_species_id.out.report
-        species_consensus = summarize_species_id.out.consensus
-        species_stats = summarize_species_id.out.stats
-        */
+        raw_pie_chart = summarize_species_id.out.raw_pie_chart
+        summary_pie_chart = summarize_species_id.out.summary_pie_chart
+        blast_top_hits = summarize_species_id.out.top_hits
+        blast_posteriors = summarize_species_id.out.posteriors
 }
