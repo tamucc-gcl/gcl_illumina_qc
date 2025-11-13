@@ -1,4 +1,13 @@
 // workflows/species_identification.nf
+// Species identification subworkflow using mitochondrial gene extraction and BLAST
+
+nextflow.enable.dsl = 2
+
+// Import necessary modules
+include { get_mito_genes } from '../modules/get_mito_genes.nf'
+include { blast_mito_genes } from '../modules/blast_mito_genes.nf'
+include { summarize_species_id } from '../modules/summarize_species_id.nf'
+
 workflow species_identification {
     take:
         reads_ch  // Channel of tuple(sample_id, read1, read2)
