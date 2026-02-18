@@ -1,6 +1,6 @@
 # GCL Illumina QC Pipeline
 
-![](pipeline_dag.png)
+<!---![](pipeline_dag.png)--->
 
 This pipeline processes demultiplexed Illumina paired-end reads through a series of quality control steps and outputs a set of high-quality reads aligned to a specified reference genome. Each step is modular and follows the [Nextflow DSL2](https://www.nextflow.io/docs/latest/dsl2.html) standard.
 
