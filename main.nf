@@ -19,7 +19,7 @@ params.outdir      = "results"
 params.run_species_id = true  // Enable/disable species identification
 params.mito_reference = "${projectDir}/databases/mito_gene_refs.fasta" // Mitochondrial gene reference provided with gcl_illumina_qc compiled from https://github.com/cmayer/MitoGeneExtractor
 params.genetic_code = 2  //Mitochondrial genetic code: https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi
-params.blast_db = "/work/birdlab/databases/midori2_latest/CO1/midori2"  // Path to local BLAST database
+params.blast_db = "/work/birdlab/databases/midori2_latest/CO1/midori2_latest"  // Path to local BLAST database
 params.taxonomy_db = "/work/birdlab/databases/ncbi_taxonomy" // Path to local NCBI Taxonomy database
 
 // Assembly parameters
@@ -438,36 +438,29 @@ workflow {
     // Use ifEmpty to provide a default value when no mapping was done
     mapping_summary_for_report = mapping_summary_ch.ifEmpty("NO_MAPPING")
     
-    // Handle assembly stats - create placeholders if needed
+    // Create placeholders once for any non-actual outputs
+    placeholder_outputs = create_placeholders()
+
+    // Handle assembly stats
     if (params.assembly_mode == "denovo") {
         final_assembly_stats = assembly_stats_ch
         final_filter_stats = filter_stats_ch
     } else {
-        placeholder_outputs = create_placeholders()
         final_assembly_stats = placeholder_outputs[0]
         final_filter_stats = placeholder_outputs[1]
     }
     
-    // Handle species ID outputs - use actual outputs or placeholders
+    // Handle species ID outputs
     if (params.run_species_id) {
         final_species_blast = species_blast_tsv
         final_species_raw_pie = species_raw_pie
         final_species_summary_pie = species_summary_pie
         final_species_top_hits = species_top_hits
     } else {
-        if (params.assembly_mode != "denovo") {
-            placeholder_outputs = create_placeholders()
-            final_species_blast = placeholder_outputs[2]
-            final_species_raw_pie = placeholder_outputs[3]
-            final_species_summary_pie = placeholder_outputs[4]
-            final_species_top_hits = placeholder_outputs[5]
-        } else {
-            // If already created placeholders for assembly, reuse them
-            final_species_blast = placeholder_outputs[2]
-            final_species_raw_pie = placeholder_outputs[3]
-            final_species_summary_pie = placeholder_outputs[4]
-            final_species_top_hits = placeholder_outputs[5]
-        }
+        final_species_blast = placeholder_outputs[2]
+        final_species_raw_pie = placeholder_outputs[3]
+        final_species_summary_pie = placeholder_outputs[4]
+        final_species_top_hits = placeholder_outputs[5]
     }
     
     // Generate final report with assembly stats and species ID
