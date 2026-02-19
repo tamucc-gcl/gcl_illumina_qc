@@ -239,14 +239,8 @@ workflow {
         mapping_summary_ch = samtools_summary.out
         
         // No assembly stats for reference genome mode - create empty placeholder files inline
-        assembly_stats_ch = Channel.fromPath("$projectDir/NO_ASSEMBLY", checkIfExists: false).ifEmpty { 
-            file("NO_ASSEMBLY").text = "No assembly performed"
-            return file("NO_ASSEMBLY")
-        }
-        filter_stats_ch = Channel.fromPath("$projectDir/NO_FILTER", checkIfExists: false).ifEmpty { 
-            file("NO_FILTER").text = "No filtering performed"
-            return file("NO_FILTER")
-        }
+        assembly_stats_ch = Channel.empty()
+        filter_stats_ch = Channel.empty()
         
     } else if (params.assembly_mode == "denovo") {
         // Option 2: De novo assembly workflow
@@ -302,14 +296,8 @@ workflow {
         mapping_summary_ch = Channel.empty()  // Use empty channel instead of value
         
         // No assembly stats for no-genome mode - create empty placeholder files inline
-        assembly_stats_ch = Channel.fromPath("$projectDir/NO_ASSEMBLY", checkIfExists: false).ifEmpty { 
-            file("NO_ASSEMBLY").text = "No assembly performed"
-            return file("NO_ASSEMBLY")
-        }
-        filter_stats_ch = Channel.fromPath("$projectDir/NO_FILTER", checkIfExists: false).ifEmpty { 
-            file("NO_FILTER").text = "No filtering performed"
-            return file("NO_FILTER")
-        }
+        assembly_stats_ch = Channel.empty()
+        filter_stats_ch = Channel.empty()
     }
 
     //----------------------------------------------------------------
@@ -333,22 +321,10 @@ workflow {
         
     } else {
         // Create empty channels for species ID outputs
-        species_blast_tsv = Channel.fromPath("$projectDir/NO_SPECIES", checkIfExists: false).ifEmpty { 
-            file("NO_SPECIES").text = "No species identification performed"
-            return file("NO_SPECIES")
-        }
-        species_raw_pie = Channel.fromPath("$projectDir/NO_SPECIES_PIE", checkIfExists: false).ifEmpty { 
-            file("NO_SPECIES_PIE").text = "No species identification performed"
-            return file("NO_SPECIES_PIE")
-        }
-        species_summary_pie = Channel.fromPath("$projectDir/NO_SPECIES_SUMMARY", checkIfExists: false).ifEmpty { 
-            file("NO_SPECIES_SUMMARY").text = "No species identification performed"
-            return file("NO_SPECIES_SUMMARY")
-        }
-        species_top_hits = Channel.fromPath("$projectDir/NO_SPECIES_HITS", checkIfExists: false).ifEmpty { 
-            file("NO_SPECIES_HITS").text = "No species identification performed"
-            return file("NO_SPECIES_HITS")
-        }
+        species_blast_tsv = Channel.empty()
+        species_raw_pie = Channel.empty()
+        species_summary_pie = Channel.empty()
+        species_top_hits = Channel.empty()
     }
     
     
