@@ -412,8 +412,13 @@ workflow {
     
     // Handle mapping summary for report generation
     // Use ifEmpty to provide a default value when no mapping was done
-    mapping_summary_for_report = mapping_summary_ch.ifEmpty("NO_MAPPING")
-    
+    //mapping_summary_for_report = mapping_summary_ch.ifEmpty("NO_MAPPING")
+    mapping_summary_for_report = mapping_summary_ch.ifEmpty {
+        def f = file("${workDir}/NO_MAPPING_SUMMARY.txt")
+        f.text = "No mapping performed"
+        return f
+    }
+
     // Create placeholders once for any non-actual outputs
     placeholder_outputs = create_placeholders()
 

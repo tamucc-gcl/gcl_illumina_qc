@@ -26,7 +26,7 @@ process generate_report {
     script:
     """
     # Check if mapping was performed
-    if [ "${mapping_summary}" == "NO_MAPPING" ]; then
+    if [ "${mapping_summary}" == "NO_MAPPING" ] || [[ "${mapping_summary}" == *"NO_MAPPING"* ]]; then
         echo "No mapping performed" > mapping_summary.txt
         export MAPPING_PERFORMED="false"
     else
