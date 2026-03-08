@@ -539,19 +539,21 @@ cleaned_retention_pct = ""
 if initial_stats["total"] > 0 and cleaned_stats["total"] > 0:
     cleaned_retention_pct = f"- Retention from raw: {(cleaned_stats['total']/initial_stats['total']*100):.1f}% of initial read pairs"
 
-cleaned_section = f"""## Final Cleaned Reads
-
-**Summary Statistics (n={cleaned_stats["n"]} samples):**
-- Mean reads per sample: {fmt_num(cleaned_stats["mean"])}
-- Standard deviation: {fmt_num(cleaned_stats["sd"])}
-- Min reads: {fmt_num(cleaned_stats["min"])}
-- Max reads: {fmt_num(cleaned_stats["max"])}
-
-**Total Cleaned Output:**
-- Total cleaned read pairs: {fmt_num(cleaned_stats["total"])}
-- Total cleaned bases: {format_bases(total_bases_cleaned)} (assuming {read_length_estimate}bp reads)
-- Total individual reads: {fmt_num(cleaned_stats["total"] * 2)} (paired-end)
-{cleaned_retention_pct}"""
+cleaned_section = (
+    "## Final Cleaned Reads\\n"
+    "\\n"
+    f"**Summary Statistics (n={cleaned_stats['n']} samples):**\\n"
+    f"- Mean reads per sample: {fmt_num(cleaned_stats['mean'])}\\n"
+    f"- Standard deviation: {fmt_num(cleaned_stats['sd'])}\\n"
+    f"- Min reads: {fmt_num(cleaned_stats['min'])}\\n"
+    f"- Max reads: {fmt_num(cleaned_stats['max'])}\\n"
+    "\\n"
+    "**Total Cleaned Output:**\\n"
+    f"- Total cleaned read pairs: {fmt_num(cleaned_stats['total'])}\\n"
+    f"- Total cleaned bases: {format_bases(total_bases_cleaned)} (assuming {read_length_estimate}bp reads)\\n"
+    f"- Total individual reads: {fmt_num(cleaned_stats['total'] * 2)} (paired-end)\\n"
+    f"{cleaned_retention_pct}"
+)
 
 
 # ----------------------------------------------------------------
@@ -563,24 +565,26 @@ if mapping_performed and final_stats["n"] > 0:
     if initial_stats["total"] > 0 and final_stats["total"] > 0:
         mapped_retention_pct = f"- Retention from raw: {(final_stats['total']/initial_stats['total']*100):.1f}% of initial read pairs"
 
-    mapping_section = f"""## Mapped Reads
-
-![Mapped Read Distribution](${params.outdir}/qc_analysis/mapped_reads_histogram.png)
-
-**Summary Statistics (n={final_stats["n"]} samples):**
-- Mean reads per sample: {fmt_num(final_stats["mean"])}
-- Standard deviation: {fmt_num(final_stats["sd"])}
-- Min reads: {fmt_num(final_stats["min"])}
-- Max reads: {fmt_num(final_stats["max"])}
-- Overall mapping rate: {final_stats["map_pct"]:.2f}%
-
-**Total Mapped Output:**
-- Total read pairs mapped: {fmt_num(final_stats["total"])}
-- Total bases mapped: {format_bases(total_bases_mapped)} (assuming {read_length_estimate}bp reads)
-{mapped_retention_pct}
-
-### Final Mapping Statistics
-See [${mapping_summary}](${params.outdir}/qc_analysis/${mapping_summary}) for detailed mapping statistics per sample."""
+    mapping_section = (
+        "## Mapped Reads\\n"
+        "\\n"
+        "![Mapped Read Distribution](${params.outdir}/qc_analysis/mapped_reads_histogram.png)\\n"
+        "\\n"
+        f"**Summary Statistics (n={final_stats['n']} samples):**\\n"
+        f"- Mean reads per sample: {fmt_num(final_stats['mean'])}\\n"
+        f"- Standard deviation: {fmt_num(final_stats['sd'])}\\n"
+        f"- Min reads: {fmt_num(final_stats['min'])}\\n"
+        f"- Max reads: {fmt_num(final_stats['max'])}\\n"
+        f"- Overall mapping rate: {final_stats['map_pct']:.2f}%\\n"
+        "\\n"
+        "**Total Mapped Output:**\\n"
+        f"- Total read pairs mapped: {fmt_num(final_stats['total'])}\\n"
+        f"- Total bases mapped: {format_bases(total_bases_mapped)} (assuming {read_length_estimate}bp reads)\\n"
+        f"{mapped_retention_pct}\\n"
+        "\\n"
+        "### Final Mapping Statistics\\n"
+        "See [${mapping_summary}](${params.outdir}/qc_analysis/${mapping_summary}) for detailed mapping statistics per sample."
+    )
 
 
 # ----------------------------------------------------------------
