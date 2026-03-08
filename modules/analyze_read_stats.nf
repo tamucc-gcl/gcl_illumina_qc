@@ -340,23 +340,31 @@ process analyze_read_stats {
         filter(stage == "map") %>%
         select(sample_id, n_reads)
     
-    # Calculate combined axis limits for consistent scaling
-    all_reads <- c(raw_data[["n_reads"]], mapped_data[["n_reads"]])
+    has_mapped <- nrow(mapped_data) > 0
+    
+    # Calculate axis limits based on available data
+    if (has_mapped) {
+        all_reads <- c(raw_data[["n_reads"]], mapped_data[["n_reads"]])
+    } else {
+        all_reads <- raw_data[["n_reads"]]
+    }
     x_limits <- c(min(all_reads) * 0.9, max(all_reads) * 1.1)
     
     # Determine appropriate number of bins (same for both)
-    n_bins <- min(20, length(unique(all_reads)) / 2)
+    n_bins <- max(5, min(20, length(unique(all_reads)) / 2))
     
     # Calculate y-axis limit based on max frequency
     raw_hist_data <- hist(raw_data[["n_reads"]], breaks = n_bins, plot = FALSE)
-    mapped_hist_data <- hist(mapped_data[["n_reads"]], breaks = n_bins, plot = FALSE)
-    y_limit <- max(c(raw_hist_data[["counts"]], mapped_hist_data[["counts"]])) * 1.1
+    if (has_mapped) {
+        mapped_hist_data <- hist(mapped_data[["n_reads"]], breaks = n_bins, plot = FALSE)
+        y_limit <- max(c(raw_hist_data[["counts"]], mapped_hist_data[["counts"]])) * 1.1
+    } else {
+        y_limit <- max(raw_hist_data[["counts"]]) * 1.1
+    }
     
-    # Calculate summary statistics
+    # Calculate summary statistics for raw reads
     raw_mean <- mean(raw_data[["n_reads"]])
     raw_median <- median(raw_data[["n_reads"]])
-    mapped_mean <- mean(mapped_data[["n_reads"]])
-    mapped_median <- median(mapped_data[["n_reads"]])
     
     # Create initial reads histogram
     p_initial <- ggplot(raw_data, aes(x = n_reads)) +
@@ -392,46 +400,66 @@ process analyze_read_stats {
     ggsave("initial_reads_histogram.png", plot = p_initial, width = 8, height = 6, dpi = 300)
     cat("Saved initial_reads_histogram.png\\n")
     
-    # Create mapped reads histogram
-    p_mapped <- ggplot(mapped_data, aes(x = n_reads)) +
-        geom_histogram(bins = n_bins, fill = "lightgreen", color = "black", alpha = 0.7) +
-        geom_vline(xintercept = mapped_mean, color = "red", linetype = "dashed", linewidth = 1) +
-        geom_vline(xintercept = mapped_median, color = "blue", linetype = "dotted", linewidth = 1) +
-        annotate("text", x = mapped_mean, y = y_limit * 0.95, 
-                 label = paste0("Mean: ", scales::comma(round(mapped_mean))),
-                 color = "red", hjust = -0.1, size = 3.5) +
-        annotate("text", x = mapped_median, y = y_limit * 0.85, 
-                 label = paste0("Median: ", scales::comma(round(mapped_median))),
-                 color = "blue", hjust = -0.1, size = 3.5) +
-        scale_y_continuous(limits = c(0, y_limit)) +
-        scale_x_log10(
-            limits = x_limits,
-            labels = trans_format("log10", math_format(10^.x)),
-            breaks = trans_breaks("log10", function(x) 10^x)
-        ) +
-        labs(
-            title = "Mapped Read Distribution",
-            subtitle = paste0("Reads after QC and mapping (n = ", nrow(mapped_data), " samples)"),
-            x = "Number of Read Pairs",
-            y = "Number of Samples"
-        ) +
-        theme_classic() +
-        theme(
-            plot.title = element_text(size = 14, face = "bold"),
-            plot.subtitle = element_text(size = 11),
-            axis.text = element_text(size = 10),
-            axis.title = element_text(size = 11)
-        )
-    
-    ggsave("mapped_reads_histogram.png", plot = p_mapped, width = 8, height = 6, dpi = 300)
-    cat("Saved mapped_reads_histogram.png\\n")
+    # Create mapped reads histogram (or placeholder if no mapping was performed)
+    if (has_mapped) {
+        mapped_mean <- mean(mapped_data[["n_reads"]])
+        mapped_median <- median(mapped_data[["n_reads"]])
+        
+        p_mapped <- ggplot(mapped_data, aes(x = n_reads)) +
+            geom_histogram(bins = n_bins, fill = "lightgreen", color = "black", alpha = 0.7) +
+            geom_vline(xintercept = mapped_mean, color = "red", linetype = "dashed", linewidth = 1) +
+            geom_vline(xintercept = mapped_median, color = "blue", linetype = "dotted", linewidth = 1) +
+            annotate("text", x = mapped_mean, y = y_limit * 0.95, 
+                     label = paste0("Mean: ", scales::comma(round(mapped_mean))),
+                     color = "red", hjust = -0.1, size = 3.5) +
+            annotate("text", x = mapped_median, y = y_limit * 0.85, 
+                     label = paste0("Median: ", scales::comma(round(mapped_median))),
+                     color = "blue", hjust = -0.1, size = 3.5) +
+            scale_y_continuous(limits = c(0, y_limit)) +
+            scale_x_log10(
+                limits = x_limits,
+                labels = trans_format("log10", math_format(10^.x)),
+                breaks = trans_breaks("log10", function(x) 10^x)
+            ) +
+            labs(
+                title = "Mapped Read Distribution",
+                subtitle = paste0("Reads after QC and mapping (n = ", nrow(mapped_data), " samples)"),
+                x = "Number of Read Pairs",
+                y = "Number of Samples"
+            ) +
+            theme_classic() +
+            theme(
+                plot.title = element_text(size = 14, face = "bold"),
+                plot.subtitle = element_text(size = 11),
+                axis.text = element_text(size = 10),
+                axis.title = element_text(size = 11)
+            )
+        
+        ggsave("mapped_reads_histogram.png", plot = p_mapped, width = 8, height = 6, dpi = 300)
+        cat("Saved mapped_reads_histogram.png\\n")
+    } else {
+        cat("No mapping data available - creating placeholder histogram\\n")
+        p_mapped <- ggplot() +
+            annotate("text", x = 0.5, y = 0.5, label = "No mapping performed",
+                     size = 8, color = "grey50") +
+            theme_void() +
+            labs(title = "Mapped Read Distribution",
+                 subtitle = "Mapping was not performed in this pipeline run")
+        
+        ggsave("mapped_reads_histogram.png", plot = p_mapped, width = 8, height = 6, dpi = 300)
+        cat("Saved placeholder mapped_reads_histogram.png\\n")
+    }
     
     # Print summary for logging
     cat("\\nHistogram Summary:\\n")
     cat("  Initial reads - Mean:", scales::comma(round(raw_mean)), 
         "Median:", scales::comma(round(raw_median)), "\\n")
-    cat("  Mapped reads - Mean:", scales::comma(round(mapped_mean)), 
-        "Median:", scales::comma(round(mapped_median)), "\\n")
+    if (has_mapped) {
+        cat("  Mapped reads - Mean:", scales::comma(round(mapped_mean)), 
+            "Median:", scales::comma(round(mapped_median)), "\\n")
+    } else {
+        cat("  Mapped reads - N/A (no mapping performed)\\n")
+    }
     cat("  X-axis range:", scales::comma(round(x_limits[1])), "to", 
         scales::comma(round(x_limits[2])), "\\n")
     cat("  Y-axis range: 0 to", round(y_limit), "\\n")
