@@ -67,15 +67,16 @@ from pathlib import Path
 # Parse genome source
 genome_source = "${genome_source}"
 
+# Check flags from environment
+mapping_performed = os.environ.get("MAPPING_PERFORMED", "false") == "true"
+assembly_performed = os.environ.get("ASSEMBLY_PERFORMED", "false") == "true"
+filter_performed = os.environ.get("FILTER_PERFORMED", "false") == "true"
+species_id_performed = os.environ.get("SPECIES_ID_PERFORMED", "false") == "true"
+
 # Initialize variables
 species_name = ""
 reference_line = ""
 assembly_section = ""
-
-# Check if de novo assembly was performed
-assembly_performed = os.environ.get("ASSEMBLY_PERFORMED", "false") == "true"
-filter_performed = os.environ.get("FILTER_PERFORMED", "false") == "true"
-species_id_performed = os.environ.get("SPECIES_ID_PERFORMED", "false") == "true"
 
 if genome_source.startswith("denovo:"):
     species_name = ""  # No species name for de novo
@@ -208,7 +209,6 @@ elif genome_source.startswith("accession:"):
     
     # Try to fetch species name from NCBI using datasets CLI if available
     try:
-        # Try using datasets CLI to get species info
         result = subprocess.run(
             ['datasets', 'summary', 'genome', 'accession', accession, '--as-json-lines'],
             capture_output=True, text=True, timeout=30
@@ -217,7 +217,6 @@ elif genome_source.startswith("accession:"):
         if result.returncode == 0:
             import json
             data = json.loads(result.stdout)
-            # Navigate the JSON structure to find species name
             if 'reports' in data and len(data['reports']) > 0:
                 report = data['reports'][0]
                 if 'organism' in report:
@@ -233,12 +232,11 @@ elif genome_source.startswith("accession:"):
         print(f"Could not fetch species name from NCBI: {e}")
         species_name = f"Species for {accession}"
     
-    # Set reference line with NCBI link
     reference_line = f"Reference genome used: [{accession}](https://www.ncbi.nlm.nih.gov/datasets/genome/{accession}/)"
     
 elif genome_source.startswith("local:"):
     genome_path = genome_source.replace("local:", "")
-    species_name = ""  # Leave blank for local genomes
+    species_name = ""
     reference_line = f"Reference genome used: Local file - `{genome_path}`"
 elif genome_source.startswith("none:"):
     species_name = ""
@@ -247,25 +245,27 @@ else:
     species_name = "Unknown"
     reference_line = "Reference genome used: Unknown source"
 
+# ----------------------------------------------------------------
 # Read the read count summary to get statistics
+# ----------------------------------------------------------------
 initial_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0, "total": 0}
-final_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0, "map_pct": 0, "total": 0}
-pp_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0}
+cleaned_stats = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0, "total": 0}
+final_stats   = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0, "map_pct": 0, "total": 0}
+pp_stats      = {"mean": 0, "sd": 0, "min": 0, "max": 0, "n": 0}
 
 # Variables for calculating total base pairs
 total_bases_raw = 0
+total_bases_cleaned = 0
 total_bases_mapped = 0
-read_length_estimate = 150  # Default estimate, will try to get actual from FastQC
+read_length_estimate = 150  # Default estimate
 
 try:
     with open("${read_summary}", 'r') as f:
         lines = f.readlines()
         
         if len(lines) > 0:
-            # Read header to get stage names (wide format)
             header = lines[0].strip().split('\\t')
             
-            # Find column indices for stages we care about
             col_indices = {}
             for i, col in enumerate(header):
                 col_lower = col.lower()
@@ -274,12 +274,12 @@ try:
             
             print(f"Found columns: {col_indices}")
             
-            # Process each sample (each row after header)
             raw_reads = []
+            cleaned_reads_list = []
             final_reads = []
             properly_paired = []
             
-            for line in lines[1:]:  # Skip header
+            for line in lines[1:]:
                 parts = line.strip().split('\\t')
                 
                 # Get raw reads
@@ -293,7 +293,18 @@ try:
                     except (ValueError, IndexError) as e:
                         print(f"Error parsing raw value: {e}")
                 
-                # Get mapped reads as final
+                # Get cleaned reads (repr = after repair, the final QC step)
+                if 'repr' in col_indices and col_indices['repr'] < len(parts):
+                    try:
+                        val = parts[col_indices['repr']]
+                        if val and val != 'NA' and val != '':
+                            repr_val = int(float(val))
+                            cleaned_reads_list.append(repr_val)
+                            cleaned_stats["total"] += repr_val
+                    except (ValueError, IndexError) as e:
+                        print(f"Error parsing repr value: {e}")
+                
+                # Get mapped reads
                 if 'map' in col_indices and col_indices['map'] < len(parts):
                     try:
                         val = parts[col_indices['map']]
@@ -303,15 +314,6 @@ try:
                             final_stats["total"] += map_val
                     except (ValueError, IndexError) as e:
                         print(f"Error parsing map value: {e}")
-                elif 'repr' in col_indices and col_indices['repr'] < len(parts):
-                    try:
-                        val = parts[col_indices['repr']]
-                        if val and val != 'NA' and val != '':
-                            repr_val = int(float(val))
-                            final_reads.append(repr_val)
-                            final_stats["total"] += repr_val
-                    except (ValueError, IndexError) as e:
-                        print(f"Error parsing repr value: {e}")
                 
                 # Get properly paired if available
                 if 'pp' in col_indices and col_indices['pp'] < len(parts):
@@ -323,7 +325,8 @@ try:
                         print(f"Error parsing pp value: {e}")
             
             print(f"Raw reads: {len(raw_reads)} samples, total: {initial_stats['total']}")
-            print(f"Final reads: {len(final_reads)} samples, total: {final_stats['total']}")
+            print(f"Cleaned reads: {len(cleaned_reads_list)} samples, total: {cleaned_stats['total']}")
+            print(f"Mapped reads: {len(final_reads)} samples, total: {final_stats['total']}")
             print(f"Properly paired: {len(properly_paired)} samples")
             
             if raw_reads:
@@ -332,6 +335,13 @@ try:
                 initial_stats["min"] = min(raw_reads)
                 initial_stats["max"] = max(raw_reads)
                 initial_stats["n"] = len(raw_reads)
+            
+            if cleaned_reads_list:
+                cleaned_stats["mean"] = statistics.mean(cleaned_reads_list)
+                cleaned_stats["sd"] = statistics.stdev(cleaned_reads_list) if len(cleaned_reads_list) > 1 else 0
+                cleaned_stats["min"] = min(cleaned_reads_list)
+                cleaned_stats["max"] = max(cleaned_reads_list)
+                cleaned_stats["n"] = len(cleaned_reads_list)
                 
             if final_reads:
                 final_stats["mean"] = statistics.mean(final_reads)
@@ -342,15 +352,15 @@ try:
                 try:
                     with open("${mapping_summary}", 'r') as f:
                         map_lines = f.readlines()
-                        if len(map_lines) > 1:  # Skip header
+                        if len(map_lines) > 1:
                             total_reads_all = 0
                             mapped_reads_all = 0
                             for line in map_lines[1:]:
                                 parts = line.strip().split('\\t')
                                 if len(parts) >= 5:
                                     try:
-                                        total_reads_all += int(parts[1])  # Total_Reads column
-                                        mapped_reads_all += int(parts[2])  # Mapped_Reads column
+                                        total_reads_all += int(parts[1])
+                                        mapped_reads_all += int(parts[2])
                                     except (ValueError, IndexError):
                                         continue
                             
@@ -363,7 +373,6 @@ try:
                     print(f"Could not calculate mapping rate from mapping_summary: {e}")
                     final_stats["map_pct"] = 0
             
-            # Calculate properly paired statistics if available
             if properly_paired:
                 pp_stats["mean"] = statistics.mean(properly_paired)
                 pp_stats["sd"] = statistics.stdev(properly_paired) if len(properly_paired) > 1 else 0
@@ -374,25 +383,21 @@ try:
 except Exception as e:
     print(f"Could not read statistics from read summary: {e}")
 
-# Try to get actual read length from MultiQC general stats (FastQC data)
-# Look for the raw_fastqc MultiQC report's general stats
+# Try to get actual read length from MultiQC general stats
 try:
     for mqc_file in os.listdir('.'):
         if mqc_file.startswith('multiqc_raw_fastqc') and mqc_file.endswith('_general_stats.txt'):
             with open(mqc_file, 'r') as f:
                 lines = f.readlines()
-                if len(lines) > 1:  # Has header and data
+                if len(lines) > 1:
                     header = lines[0].strip().split('\\t')
-                    # Look for sequence length column (FastQC reports this)
                     for i, col in enumerate(header):
                         if 'sequence_length' in col.lower() or 'avg_sequence_length' in col.lower():
-                            # Get average from all samples
                             lengths = []
                             for line in lines[1:]:
                                 parts = line.strip().split('\\t')
                                 if i < len(parts):
                                     try:
-                                        # Handle ranges like "150-151" by taking the average
                                         if '-' in parts[i]:
                                             range_parts = parts[i].split('-')
                                             avg_len = (int(range_parts[0]) + int(range_parts[1])) / 2
@@ -410,11 +415,10 @@ except Exception as e:
     print(f"Could not extract read length from FastQC data, using default {read_length_estimate}: {e}")
 
 # Calculate total base pairs
-# Note: We multiply by 2 for paired-end reads (R1 + R2)
 total_bases_raw = initial_stats["total"] * read_length_estimate * 2
+total_bases_cleaned = cleaned_stats["total"] * read_length_estimate * 2
 total_bases_mapped = final_stats["total"] * read_length_estimate * 2
 
-# Convert to appropriate units (Gbp, Mbp, etc.)
 def format_bases(n_bases):
     if n_bases >= 1e9:
         return f"{n_bases/1e9:.2f} Gbp"
@@ -425,13 +429,14 @@ def format_bases(n_bases):
     else:
         return f"{n_bases:.0f} bp"
 
+def fmt_num(n):
+    return f"{n:,.0f}"
+
 # Find MultiQC reports and sort them
 multiqc_files = [f for f in os.listdir('.') if f.startswith('multiqc_') and f.endswith('.html')]
 
-# Define the expected order
 stage_order = ['raw_fastqc', 'fastp_trim_3', 'clumpify', 'fastp_trim_5', 'fastq_screen', 'repair', 'mapping']
 
-# Sort MultiQC files by stage order
 sorted_multiqc = []
 for stage in stage_order:
     for f in multiqc_files:
@@ -439,8 +444,6 @@ for stage in stage_order:
             sorted_multiqc.append(f)
             break
 
-# Create MultiQC links section
-multiqc_links = []
 stage_names = {
     'raw_fastqc': 'Raw FastQC',
     'fastp_trim_3': "3' Trimming (Fastp)",
@@ -452,33 +455,32 @@ stage_names = {
     'mapping_denovo': 'Mapping to De Novo Assembly'
 }
 
+multiqc_links = []
 for mqc_file in sorted_multiqc:
-    # Extract stage from filename
     for stage, name in stage_names.items():
         if stage in mqc_file:
             multiqc_links.append(f"- [{name}](${params.outdir}/multiqc_reports/{mqc_file})")
             break
 
+# ----------------------------------------------------------------
 # Process species identification results if available
+# ----------------------------------------------------------------
 species_id_section = ""
 if species_id_performed:
     try:
         import csv
         from collections import Counter
         
-        # Read top hits CSV to get species identification summary
         with open("${species_top_hits}", 'r') as f:
             reader = csv.DictReader(f)
             rows = list(reader)
         
         if rows:
-            # Get the most likely species across samples
             species_counts = {}
             taxonomic_levels = ['kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species']
             
             for col in taxonomic_levels:
-                if col in rows[0]:  # Check if column exists
-                    # Count occurrences of each taxon at this level
+                if col in rows[0]:
                     values = [row[col] for row in rows if row.get(col) and row[col].strip()]
                     if values:
                         counter = Counter(values)
@@ -488,7 +490,6 @@ if species_id_performed:
             
             species_id_section = "## Species Identification (BLAST Analysis)\\n\\n"
             
-            # Add identified species information
             if species_counts:
                 species_id_section += "**Taxonomic Classification (Most Likely):**\\n"
                 for level, taxon in species_counts.items():
@@ -496,12 +497,10 @@ if species_id_performed:
                         species_id_section += f"- {level.capitalize()}: {taxon}\\n"
                 species_id_section += "\\n"
             
-            # Add sample-level summary
             n_samples = len(rows)
             species_id_section += f"**Sample Summary:**\\n"
             species_id_section += f"- Number of samples analyzed: {n_samples}\\n"
             
-            # Count how many samples agreed on species
             if 'species' in rows[0]:
                 species_values = [row.get('species', '') for row in rows if row.get('species', '').strip()]
                 if species_values:
@@ -514,7 +513,6 @@ if species_id_performed:
             
             species_id_section += "\\n"
             
-            # Add visualization section
             species_id_section += "### BLAST Hit Distributions\\n\\n"
             species_id_section += "#### Raw BLAST Results by Taxonomic Level\\n"
             species_id_section += "![Raw BLAST Pie Charts](${params.outdir}/species_id/blast_raw_pie.png)\\n\\n"
@@ -522,7 +520,6 @@ if species_id_performed:
             species_id_section += "#### Summarized Species Identification\\n"
             species_id_section += "![Summary BLAST Pie Charts](${params.outdir}/species_id/blast_summary_pie.png)\\n\\n"
             
-            # Add links to detailed results
             species_id_section += "### Detailed Results\\n\\n"
             species_id_section += "- [Combined BLAST results (TSV)](${params.outdir}/species_id/blast_results.tsv)\\n"
             species_id_section += "- [Top BLAST hits per sample (CSV)](${params.outdir}/species_id/top_blast_hits.csv)\\n"
@@ -534,21 +531,61 @@ if species_id_performed:
 else:
     print("Species identification was not performed or no results available")
 
-# Format numbers with thousands separator
-def fmt_num(n):
-    return f"{n:,.0f}"
 
-# Generate properly paired section
-pp_section = ""
-if pp_stats["n"] > 0:
-    pp_section = "### Properly Paired Reads\\n"
-    pp_section += f"**Summary Statistics (n={pp_stats['n']} samples):**\\n"
-    pp_section += f"- Mean reads: {fmt_num(pp_stats['mean'])}\\n"
-    pp_section += f"- Standard deviation: {fmt_num(pp_stats['sd'])}\\n"
-    pp_section += f"- Min reads: {fmt_num(pp_stats['min'])}\\n"
-    pp_section += f"- Max reads: {fmt_num(pp_stats['max'])}"
+# ----------------------------------------------------------------
+# Build the cleaned reads section (always present)
+# ----------------------------------------------------------------
+cleaned_retention_pct = ""
+if initial_stats["total"] > 0 and cleaned_stats["total"] > 0:
+    cleaned_retention_pct = f"- Retention from raw: {(cleaned_stats['total']/initial_stats['total']*100):.1f}% of initial read pairs"
 
+cleaned_section = f"""## Final Cleaned Reads
+
+**Summary Statistics (n={cleaned_stats["n"]} samples):**
+- Mean reads per sample: {fmt_num(cleaned_stats["mean"])}
+- Standard deviation: {fmt_num(cleaned_stats["sd"])}
+- Min reads: {fmt_num(cleaned_stats["min"])}
+- Max reads: {fmt_num(cleaned_stats["max"])}
+
+**Total Cleaned Output:**
+- Total cleaned read pairs: {fmt_num(cleaned_stats["total"])}
+- Total cleaned bases: {format_bases(total_bases_cleaned)} (assuming {read_length_estimate}bp reads)
+- Total individual reads: {fmt_num(cleaned_stats["total"] * 2)} (paired-end)
+{cleaned_retention_pct}"""
+
+
+# ----------------------------------------------------------------
+# Build the mapping section (only if mapping was performed)
+# ----------------------------------------------------------------
+mapping_section = ""
+if mapping_performed and final_stats["n"] > 0:
+    mapped_retention_pct = ""
+    if initial_stats["total"] > 0 and final_stats["total"] > 0:
+        mapped_retention_pct = f"- Retention from raw: {(final_stats['total']/initial_stats['total']*100):.1f}% of initial read pairs"
+
+    mapping_section = f"""## Mapped Reads
+
+![Mapped Read Distribution](${params.outdir}/qc_analysis/mapped_reads_histogram.png)
+
+**Summary Statistics (n={final_stats["n"]} samples):**
+- Mean reads per sample: {fmt_num(final_stats["mean"])}
+- Standard deviation: {fmt_num(final_stats["sd"])}
+- Min reads: {fmt_num(final_stats["min"])}
+- Max reads: {fmt_num(final_stats["max"])}
+- Overall mapping rate: {final_stats["map_pct"]:.2f}%
+
+**Total Mapped Output:**
+- Total read pairs mapped: {fmt_num(final_stats["total"])}
+- Total bases mapped: {format_bases(total_bases_mapped)} (assuming {read_length_estimate}bp reads)
+{mapped_retention_pct}
+
+### Final Mapping Statistics
+See [${mapping_summary}](${params.outdir}/qc_analysis/${mapping_summary}) for detailed mapping statistics per sample."""
+
+
+# ----------------------------------------------------------------
 # Generate the markdown report
+# ----------------------------------------------------------------
 markdown_content = f'''# GCL Illumina QC Pipeline Report
 
 {"## " + species_name if species_name else ""}
@@ -581,26 +618,9 @@ markdown_content = f'''# GCL Illumina QC Pipeline Report
 ### Stage-by-Stage Comparison
 See [stage_comparison.txt](${params.outdir}/qc_analysis/stage_comparison.txt) for detailed retention rates between stages.
 
-## Post QC
+{cleaned_section}
 
-### Mapped Reads
-
-![Mapped Read Distribution](${params.outdir}/qc_analysis/mapped_reads_histogram.png)
-
-**Summary Statistics (n={final_stats["n"]} samples):**
-- Mean reads per sample: {fmt_num(final_stats["mean"])}
-- Standard deviation: {fmt_num(final_stats["sd"])}
-- Min reads: {fmt_num(final_stats["min"])}
-- Max reads: {fmt_num(final_stats["max"])}
-- Overall mapping rate: {final_stats["map_pct"]:.2f}%
-
-**Total Mapped Output:**
-- Total read pairs mapped: {fmt_num(final_stats["total"])}
-- Total bases mapped: {format_bases(total_bases_mapped)} (assuming {read_length_estimate}bp reads)
-- Retention from raw: {(final_stats["total"]/initial_stats["total"]*100):.1f}% of initial read pairs
-
-### Final Mapping Statistics
-See [${mapping_summary}](${params.outdir}/qc_analysis/${mapping_summary}) for detailed mapping statistics per sample.
+{mapping_section}
 
 {species_id_section}
 
@@ -616,8 +636,13 @@ print("Markdown report generated successfully!")
 print(f"\\nReport Summary:")
 print(f"  Total read pairs sequenced: {fmt_num(initial_stats['total'])}")
 print(f"  Total bases sequenced: {format_bases(total_bases_raw)}")
-print(f"  Total read pairs mapped: {fmt_num(final_stats['total'])}")
-print(f"  Total bases mapped: {format_bases(total_bases_mapped)}")
+print(f"  Total cleaned read pairs: {fmt_num(cleaned_stats['total'])}")
+print(f"  Total cleaned bases: {format_bases(total_bases_cleaned)}")
+if mapping_performed:
+    print(f"  Total read pairs mapped: {fmt_num(final_stats['total'])}")
+    print(f"  Total bases mapped: {format_bases(total_bases_mapped)}")
+else:
+    print(f"  Mapping: Not performed")
 if species_id_performed:
     print(f"  Species identification: Completed")
 
@@ -626,8 +651,7 @@ try:
     subprocess.run(['pandoc', 'qc_pipeline_report.md', '-o', 'qc_pipeline_report.html', '--standalone', '--metadata', 'title=GCL QC Pipeline Report'], check=True)
     print("HTML report generated successfully!")
 except:
-    # If pandoc not available, create a simple HTML wrapper
-    html_content = f'''<!DOCTYPE html>
+    html_content = f\'\'\'<!DOCTYPE html>
 <html>
 <head>
     <title>GCL QC Pipeline Report</title>
@@ -644,7 +668,7 @@ except:
 <body>
 <pre>{markdown_content}</pre>
 </body>
-</html>'''
+</html>\'\'\'
     with open("qc_pipeline_report.html", 'w') as f:
         f.write(html_content)
     print("Basic HTML report generated (pandoc not available)")
