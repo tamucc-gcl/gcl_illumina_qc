@@ -2,6 +2,7 @@
 // July 2025 – consolidated MultiQC per step
 // Oct 2025 - implement local genome option
 // Nov 2025 - add de novo assembly & species ID options
+// Mar 2026 - add stacks sequencing type with uniform trim
 
 nextflow.enable.dsl = 2
 
@@ -12,8 +13,11 @@ params.reads       = "data/fq_raw/*.{1,2}.fq.gz"    // paired‑end,  sampleID.1
 params.accession   = null                            // NCBI assembly accession (optional)
 params.genome      = null                            // Path to local genome file (optional)
 params.decontam_conffile    = "${projectDir}/config_files/example_fastq-screen.conf"  // FastQ Screen config file
-params.sequencing_type = "whole_genome"  // Options: "ddrad" or "whole_genome"
+params.sequencing_type = "whole_genome"  // Options: "ddrad", "whole_genome", or "stacks"
 params.outdir      = "results"
+
+// Uniform trim parameter - set automatically for stacks mode, or manually override
+params.uniform_trim_length = 0  // 0 = disabled, >0 = trim all reads to this length (bp)
 
 // Species ID parameters
 params.run_species_id = false  // Enable/disable species identification
@@ -32,10 +36,36 @@ params.merge_r = 2
 params.final_similarity = 0.9
 
 //--------------------------------------------------------------------
+// DERIVED PARAMETERS
+//--------------------------------------------------------------------
+
+// Stacks mode behaves like ddrad but with uniform trimming
+// Resolve the effective sequencing type for tools that care about ddrad vs whole_genome
+def effective_sequencing_type = params.sequencing_type == "stacks" ? "ddrad" : params.sequencing_type
+
+// Resolve uniform trim length: explicit override takes priority, otherwise auto-set for stacks
+def uniform_trim_length = params.uniform_trim_length > 0 
+    ? params.uniform_trim_length 
+    : (params.sequencing_type == "stacks" ? 140 : 0)
+
+//--------------------------------------------------------------------
 // WORKFLOW DEFINITION
 //--------------------------------------------------------------------
 
 workflow {
+    // Validate sequencing type
+    if (!(params.sequencing_type in ['ddrad', 'whole_genome', 'stacks'])) {
+        error "Invalid sequencing_type '${params.sequencing_type}'. Must be 'ddrad', 'whole_genome', or 'stacks'"
+    }
+
+    // Log uniform trim info
+    if (uniform_trim_length > 0) {
+        log.info "Uniform trim enabled: all reads will be trimmed to ${uniform_trim_length} bp"
+    }
+    if (params.sequencing_type == "stacks") {
+        log.info "Stacks mode: using ddRAD parameters with uniform read length (${uniform_trim_length} bp)"
+    }
+
     // Validate genome input parameters
     if (!params.genome && !params.accession && params.assembly_mode == "none") {
         log.info "No reference genome provided - will output cleaned FASTQ files only"
@@ -92,9 +122,9 @@ workflow {
         Channel.value('fastp_trim_3')
     )
     
-    // Step 2: Clumpify
+    // Step 2: Clumpify - use effective_sequencing_type so stacks behaves like ddrad
     clumpify( fastp_trim_3.out,
-              Channel.value(params.sequencing_type))
+              Channel.value(effective_sequencing_type))
     
     // FastQC after clumpify
     fastqc_clumpify( 
@@ -114,8 +144,11 @@ workflow {
         Channel.value('clumpify')
     )
     
-    // Step 3: 5' trimming with fastp
-    fastp_trim_5( clumpify.out.map{ sid, r1, r2, stats -> tuple(sid, r1, r2) } )
+    // Step 3: 5' trimming with fastp - pass uniform trim length
+    fastp_trim_5( 
+        clumpify.out.map{ sid, r1, r2, stats -> tuple(sid, r1, r2) },
+        Channel.value(uniform_trim_length)
+    )
     
     // FastQC after 5' trimming
     fastqc_trim5( 
@@ -194,6 +227,11 @@ workflow {
         Channel.value('repair')
     )
     
+    //----------------------------------------------------------------
+    // 3a. OUTPUT CLEANED READS (always runs)
+    //----------------------------------------------------------------
+    output_cleaned_reads( repair.out )
+
     //----------------------------------------------------------------
     // 4. GENOME PREPARATION AND MAPPING (branching logic)
     //----------------------------------------------------------------
@@ -285,8 +323,6 @@ workflow {
     } else {
         // Option 3: No genome mode - just output cleaned reads
         log.info "No reference genome - outputting cleaned FASTQ files only"
-        
-        output_cleaned_reads( repair.out )
         
         // Create empty channels for mapping-related outputs
         multiqc_mapping_out = Channel.empty().mix(

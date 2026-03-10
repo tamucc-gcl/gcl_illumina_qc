@@ -4,6 +4,7 @@ process fastp_trim_5 {
 
     input:
         tuple val(sample_id), path(read1), path(read2)
+        val(uniform_trim_length)
 
     output:
         tuple val(sample_id),
@@ -13,6 +14,7 @@ process fastp_trim_5 {
               path("${sample_id}_trim5_fastp.html")
 
     script:
+    def max_len_args = uniform_trim_length > 0 ? "--max_len1 ${uniform_trim_length} --max_len2 ${uniform_trim_length}" : ""
     """
     fastp \
         --in1 ${read1} \
@@ -35,6 +37,7 @@ process fastp_trim_5 {
         --correction \
         --disable_quality_filtering \
         --unqualified_percent_limit 40 \
+        ${max_len_args} \
         --report_title "Second Trim R1R2" \
         -w ${task.cpus ?: 4}
     """

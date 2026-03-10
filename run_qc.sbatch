@@ -11,7 +11,7 @@ module load miniconda3
 
 # Parse arguments
 genome_or_accession=${1}
-sequencing_type=${2}  # ddrad or whole_genome
+sequencing_type=${2}  # ddrad, whole_genome, or stacks
 contamination_file=${3}
 
 # Instructions
@@ -58,6 +58,15 @@ echo ""
 echo "sbatch run_qc.sbatch none whole_genome configs/contam_db.conf"
 echo ""
 echo "-------------------------------------------"
+echo "EXAMPLE 5: Stacks mode (ddRAD with uniform read trimming)"
+echo "-------------------------------------------"
+echo "sbatch run_qc.sbatch denovo stacks configs/contam_db.conf"
+echo ""
+echo "sbatch run_qc.sbatch GCA_042920385.1 stacks configs/contam_db.conf"
+echo ""
+echo "sbatch run_qc.sbatch none stacks configs/contam_db.conf"
+echo ""
+echo "-------------------------------------------"
 echo "PARAMETERS:"
 echo "-------------------------------------------"
 echo "  Arg 1: genome_or_accession"
@@ -69,6 +78,7 @@ echo ""
 echo "  Arg 2: sequencing_type"
 echo "    - 'ddrad' for ddRAD sequencing"
 echo "    - 'whole_genome' for whole genome sequencing"
+echo "    - 'stacks' for ddRAD with uniform read length trimming (for Stacks compatibility)"
 echo ""
 echo "  Arg 3: contamination_config"
 echo "    - Path to FastQ Screen configuration file"
@@ -93,6 +103,14 @@ echo "3. If argument 1 is a file that exists → use --genome"
 echo "4. If argument 1 matches GC[AF]_*.* pattern → use --accession"
 echo "5. Otherwise → assume it's an accession (let Nextflow validate)"
 echo ""
+echo "-------------------------------------------"
+echo "STACKS MODE NOTES:"
+echo "-------------------------------------------"
+echo "  - Behaves identically to 'ddrad' for all QC steps"
+echo "  - Additionally trims all reads to 140 bp (uniform length)"
+echo "  - Resolves Stacks 'different sequence lengths' error"
+echo "  - Override trim length with --uniform_trim_length <bp>"
+echo ""
 echo "==========================================="
 
 # Validate arguments
@@ -103,12 +121,13 @@ if [ -z "$genome_or_accession" ]; then
     echo "Example (NCBI): sbatch run_qc.sbatch GCA_042920385.1 whole_genome configs/contam_db.conf"
     echo "Example (de novo): sbatch run_qc.sbatch denovo ddrad configs/contam_db.conf"
     echo "Example (no genome): sbatch run_qc.sbatch none whole_genome configs/contam_db.conf"
+    echo "Example (stacks): sbatch run_qc.sbatch denovo stacks configs/contam_db.conf"
     exit 1
 fi
 
 if [ -z "$sequencing_type" ]; then
     echo "Error: Second argument (sequencing_type) is required"
-    echo "Options: ddrad or whole_genome"
+    echo "Options: ddrad, whole_genome, or stacks"
     exit 1
 fi
 
@@ -118,8 +137,8 @@ if [ -z "$contamination_file" ]; then
 fi
 
 # Validate sequencing type
-if [[ "$sequencing_type" != "ddrad" && "$sequencing_type" != "whole_genome" ]]; then
-    echo "Error: sequencing_type must be either 'ddrad' or 'whole_genome'"
+if [[ "$sequencing_type" != "ddrad" && "$sequencing_type" != "whole_genome" && "$sequencing_type" != "stacks" ]]; then
+    echo "Error: sequencing_type must be 'ddrad', 'whole_genome', or 'stacks'"
     echo "You provided: $sequencing_type"
     exit 1
 fi
@@ -141,8 +160,8 @@ if [ "$genome_or_accession" == "denovo" ]; then
     assembly_param="--assembly_mode denovo"
     genome_info="Mode: De novo assembly from cleaned reads"
     
-    # Additional message for ddRAD
-    if [ "$sequencing_type" == "ddrad" ]; then
+    # Additional message for ddRAD/stacks
+    if [ "$sequencing_type" == "ddrad" ] || [ "$sequencing_type" == "stacks" ]; then
         echo "Using Rainbow assembly pipeline optimized for ddRAD data"
     fi
 
@@ -211,6 +230,15 @@ echo "Sequencing type: $sequencing_type"
 echo "Contamination config: $contamination_file"
 echo "Output directory: results"
 
+# Print stacks mode info
+if [ "$sequencing_type" == "stacks" ]; then
+    echo "-------------------------------------------"
+    echo "Stacks mode:"
+    echo "  Using ddRAD parameters for all QC steps"
+    echo "  Uniform trim: all reads trimmed to 140 bp"
+    echo "  (Override with --uniform_trim_length <bp>)"
+fi
+
 # Print de novo assembly parameters if applicable
 if [ "$genome_or_accession" == "denovo" ]; then
     echo "-------------------------------------------"
@@ -257,6 +285,9 @@ if [ $exit_code -eq 0 ]; then
     fi
     
     echo "QC reports saved to: results/"
+    if [ "$sequencing_type" == "stacks" ]; then
+        echo "Note: Reads trimmed to uniform length for Stacks compatibility"
+    fi
     echo "==========================================="
 else
     echo ""
