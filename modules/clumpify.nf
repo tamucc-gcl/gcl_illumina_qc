@@ -23,17 +23,12 @@ process clumpify {
     def optical_param = sequencing_type == 'ddrad' ? 'optical=t' : 'optical=f'
 
     """
-    temp_dir=\$(mktemp -d)
-    trap "rm -rf \$temp_dir" EXIT
-
     clumpify.sh \
         in=${read1} \
         in2=${read2} \
         out=${sample_id}_fp1-clmp.r1.fq.gz \
         out2=${sample_id}_fp1-clmp.r2.fq.gz \
         overwrite=t \
-        usetmpdir=t \
-        deletetemp=t \
         dedupe=t \
         ${optical_param} \
         dupedist=12000 \
