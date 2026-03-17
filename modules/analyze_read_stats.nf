@@ -17,7 +17,7 @@ process analyze_read_stats {
     label 'r_analysis'
     tag "read_stats_analysis"
     
-    publishDir "${params.outdir}/read_analysis", mode: 'copy'
+    publishDir "${params.outdir}/qc_analysis", mode: 'copy'
     
     input:
         path(stats_files)
