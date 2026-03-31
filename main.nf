@@ -263,7 +263,7 @@ workflow {
         
         // MultiQC for mapping
         multiqc_mapping_out = multiqc_mapping(
-            samtools_stats.out
+            samtools_stats.out[0]
                 .map{ sid, stats, flagstats -> [stats, flagstats] }
                 .flatten()
                 .collect(),
@@ -272,8 +272,14 @@ workflow {
         
         // Create mapping summary
         samtools_summary(
-            samtools_stats.out
+            samtools_stats.out[0]
                 .map{ sid, stats, flagstats -> stats }
+                .collect(),
+            samtools_stats.out[1]
+                .map{ sid, soft_clip -> soft_clip }
+                .collect(),
+            samtools_stats.out[2]
+                .map{ sid, aln_score -> aln_score }
                 .collect()
         )
         
@@ -316,8 +322,14 @@ workflow {
         
         // Create mapping summary
         samtools_summary(
-            samtools_stats.out
+            samtools_stats.out[0]
                 .map{ sid, stats, flagstats -> stats }
+                .collect(),
+            samtools_stats.out[1]
+                .map{ sid, soft_clip -> soft_clip }
+                .collect(),
+            samtools_stats.out[2]
+                .map{ sid, aln_score -> aln_score }
                 .collect()
         )
         
@@ -417,6 +429,8 @@ workflow {
             path "no_species_raw_pie.png"
             path "no_species_summary_pie.png"
             path "no_species_top_hits.csv"
+            path "no_soft_clip_violin.png"    // [7] NEW
+            path "no_aln_score_violin.png"    // [8] NEW
         
         script:
         """
@@ -427,6 +441,8 @@ workflow {
         echo "No species identification performed" > no_species_raw_pie.png
         echo "No species identification performed" > no_species_summary_pie.png
         echo "No species identification performed" > no_species_top_hits.csv
+        echo "No mapping performed"             > no_soft_clip_violin.png
+        echo "No mapping performed"             > no_aln_score_violin.pn
         """
     }
     
@@ -475,8 +491,12 @@ workflow {
     // Handle insert size violin
     if (params.genome || params.accession || params.assembly_mode == "denovo") {
         final_insert_size_violin = mapping_summary_ch[1]
+        final_soft_clip_violin     = samtools_summary.out[2]
+        final_aln_score_violin     = samtools_summary.out[3]
     } else {
         final_insert_size_violin = placeholder_outputs[2]
+        final_soft_clip_violin     = placeholder_outputs[7]   // new
+        final_aln_score_violin     = placeholder_outputs[8]   // new
     }
 
     // Handle species ID outputs
@@ -502,6 +522,8 @@ workflow {
         analyze_read_stats.out[6],  // mapped_reads_histogram.png
         mapping_summary_for_report,
         final_insert_size_violin,    // insert_size_violin.png
+        final_soft_clip_violin,      // NEW
+        final_aln_score_violin,      // NEW
         final_assembly_stats,        // Assembly statistics (actual or placeholder)
         final_filter_stats,          // Filter statistics (actual or placeholder)
         final_species_blast,         // BLAST results TSV
