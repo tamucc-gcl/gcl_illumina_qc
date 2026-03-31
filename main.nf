@@ -15,6 +15,7 @@ params.publish_dir_mode = "copy"  // Options: "copy", "symlink", "move"
 params.reads       = "data/fq_raw/*.{1,2}.fq.gz"    // paired‑end,  sampleID.1.fq.gz / .2.fq.gz
 params.accession   = null                            // NCBI assembly accession (optional)
 params.genome      = null                            // Path to local genome file (optional)
+params.assembly_mode = "none"                     // Options: "none" (no assembly), "denovo" (assemble from reads)
 params.decontam_conffile    = "${projectDir}/config_files/example_fastq-screen.conf"  // FastQ Screen config file
 params.sequencing_type = "whole_genome"  // Options: "ddrad", "whole_genome", or "stacks"
 
