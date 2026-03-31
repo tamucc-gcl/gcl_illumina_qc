@@ -23,7 +23,7 @@ process samtools_stats {
     # Get soft clipping stats
     samtools view -@ ${task.cpus ?: 4} ${bam} |
         awk '{
-        cigar = $6
+        cigar = \$6
         total = 0
         while (match(cigar, /[0-9]+[MIDNSHP=X]/)) {
             op  = substr(cigar, RSTART, RLENGTH)
@@ -39,8 +39,8 @@ process samtools_stats {
     samtools view -@ ${task.cpus ?: 4} ${bam} |
         awk '{
         for(i=12;i<=NF;i++){
-            if($i ~ /^AS:i:/){
-            split($i,a,":");
+            if(\$i ~ /^AS:i:/){
+            split(\$i,a,":");
             print a[3];
             }
         }
