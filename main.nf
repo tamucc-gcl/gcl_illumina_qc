@@ -442,7 +442,7 @@ workflow {
         echo "No species identification performed" > no_species_summary_pie.png
         echo "No species identification performed" > no_species_top_hits.csv
         echo "No mapping performed"             > no_soft_clip_violin.png
-        echo "No mapping performed"             > no_aln_score_violin.pn
+        echo "No mapping performed"             > no_aln_score_violin.png
         """
     }
     
