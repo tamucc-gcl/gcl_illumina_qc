@@ -412,6 +412,7 @@ workflow {
         output:
             path "no_assembly_stats.txt"
             path "no_filter_stats.txt"
+            path "no_insert_size_violin.png"
             path "no_species_blast.txt"
             path "no_species_raw_pie.png"
             path "no_species_summary_pie.png"
@@ -421,6 +422,7 @@ workflow {
         """
         echo "No assembly performed" > no_assembly_stats.txt
         echo "No filtering performed" > no_filter_stats.txt
+        echo "No mapping performed" > no_insert_size_violin.png
         echo "No species identification performed" > no_species_blast.txt
         echo "No species identification performed" > no_species_raw_pie.png
         echo "No species identification performed" > no_species_summary_pie.png
@@ -470,6 +472,13 @@ workflow {
         final_filter_stats = placeholder_outputs[1]
     }
     
+    // Handle insert size violin
+    if (params.genome || params.accession || params.assembly_mode == "denovo") {
+        final_insert_size_violin = samtools_summary.out[1]
+    } else {
+        final_insert_size_violin = placeholder_outputs[2]
+    }
+
     // Handle species ID outputs
     if (params.run_species_id) {
         final_species_blast = species_blast_tsv
@@ -477,10 +486,10 @@ workflow {
         final_species_summary_pie = species_summary_pie
         final_species_top_hits = species_top_hits
     } else {
-        final_species_blast = placeholder_outputs[2]
-        final_species_raw_pie = placeholder_outputs[3]
-        final_species_summary_pie = placeholder_outputs[4]
-        final_species_top_hits = placeholder_outputs[5]
+        final_species_blast = placeholder_outputs[3]
+        final_species_raw_pie = placeholder_outputs[4]
+        final_species_summary_pie = placeholder_outputs[5]
+        final_species_top_hits = placeholder_outputs[6]
     }
     
     // Generate final report with assembly stats and species ID
@@ -492,6 +501,7 @@ workflow {
         analyze_read_stats.out[5],  // initial_reads_histogram.png
         analyze_read_stats.out[6],  // mapped_reads_histogram.png
         mapping_summary_for_report,
+        final_insert_size_violin,    // insert_size_violin.png
         final_assembly_stats,        // Assembly statistics (actual or placeholder)
         final_filter_stats,          // Filter statistics (actual or placeholder)
         final_species_blast,         // BLAST results TSV

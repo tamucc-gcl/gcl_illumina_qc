@@ -12,12 +12,13 @@ process generate_report {
         path initial_histogram
         path mapped_histogram
         path mapping_summary
-        path assembly_stats  // New input for assembly statistics
-        path filter_stats    // New input for filtering statistics
-        path species_blast_tsv    // New: BLAST results TSV
-        path species_raw_pie      // New: Raw BLAST pie chart
-        path species_summary_pie  // New: Summary BLAST pie chart
-        path species_top_hits     // New: Top BLAST hits CSV
+        path insert_size_violin 
+        path assembly_stats
+        path filter_stats
+        path species_blast_tsv
+        path species_raw_pie
+        path species_summary_pie
+        path species_top_hits
         
     output:
         path "qc_pipeline_report.md"
@@ -33,6 +34,13 @@ process generate_report {
         export MAPPING_PERFORMED="true"
     fi
     
+    # Check if insert size violin exists and mapping was performed
+    if [ "\$MAPPING_PERFORMED" == "true" ] && [ -f "${insert_size_violin}" ] && [[ "${insert_size_violin}" != *"NO_"* ]]; then
+        export INSERT_SIZE_VIOLIN_PERFORMED="true"
+    else
+        export INSERT_SIZE_VIOLIN_PERFORMED="false"
+    fi
+
     # Check if assembly stats exist
     if [[ "${assembly_stats}" == *"no_assembly"* ]] || [[ "${assembly_stats}" == *"NO_ASSEMBLY"* ]]; then
         export ASSEMBLY_PERFORMED="false"
@@ -69,6 +77,7 @@ genome_source = "${genome_source}"
 
 # Check flags from environment
 mapping_performed = os.environ.get("MAPPING_PERFORMED", "false") == "true"
+insert_size_violin_performed = os.environ.get("INSERT_SIZE_VIOLIN_PERFORMED", "false") == "true"
 assembly_performed = os.environ.get("ASSEMBLY_PERFORMED", "false") == "true"
 filter_performed = os.environ.get("FILTER_PERFORMED", "false") == "true"
 species_id_performed = os.environ.get("SPECIES_ID_PERFORMED", "false") == "true"
@@ -565,10 +574,15 @@ if mapping_performed and final_stats["n"] > 0:
     if initial_stats["total"] > 0 and final_stats["total"] > 0:
         mapped_retention_pct = f"- Retention from raw: {(final_stats['total']/initial_stats['total']*100):.1f}% of initial read pairs"
 
+    insert_size_line = ""
+    if insert_size_violin_performed:
+        insert_size_line = "\\n![Insert Size Distribution](${params.outdir}/qc/insert_size_violin.png)\\n"
+
     mapping_section = (
         "## Mapped Reads\\n"
         "\\n"
         "![Mapped Read Distribution](${params.outdir}/qc/mapped_reads_histogram.png)\\n"
+        f"{insert_size_line}"
         "\\n"
         f"**Summary Statistics (n={final_stats['n']} samples):**\\n"
         f"- Mean reads per sample: {fmt_num(final_stats['mean'])}\\n"
@@ -590,7 +604,7 @@ if mapping_performed and final_stats["n"] > 0:
 # ----------------------------------------------------------------
 # Generate the markdown report
 # ----------------------------------------------------------------
-markdown_content = f'''# GCL Illumina QC Pipeline Report
+markdown_content = f\'\'\'# GCL Illumina QC Pipeline Report
 
 {"## " + species_name if species_name else ""}
 
@@ -630,7 +644,7 @@ See [stage_comparison.txt](${params.outdir}/qc/stage_comparison.txt) for detaile
 
 ---
 *QC Report generated on: {subprocess.check_output(['date']).decode().strip()}*
-'''
+\'\'\'
 
 # Write markdown file
 with open("qc_pipeline_report.md", 'w') as f:

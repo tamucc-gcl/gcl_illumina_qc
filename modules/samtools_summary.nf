@@ -3,13 +3,14 @@ process samtools_summary {
     label 'samtools_summary'
     tag "mapping_summary"
 
-    // publishDir "${params.outdir}/qc", mode: params.publish_dir_mode
+    publishDir "${params.outdir}/qc", mode: params.publish_dir_mode, pattern: "insert_size_violin.png"
     
     input:
         path(stats_files)
     
     output:
         path("mapping_summary.txt")
+        path("insert_size_violin.png")
     
     script:
     """
@@ -63,6 +64,9 @@ process samtools_summary {
         fi
     done
     
+    # Run the R script
+    Rscript ${projectDir}/r_scripts/insert_violin.R
+
     echo ""
     echo "=== Final Mapping Summary ==="
     cat mapping_summary.txt
