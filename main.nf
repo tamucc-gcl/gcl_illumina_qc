@@ -454,11 +454,11 @@ workflow {
     // Handle mapping summary for report generation
     // Use ifEmpty to provide a default value when no mapping was done
     //mapping_summary_for_report = mapping_summary_ch.ifEmpty("NO_MAPPING")
-    mapping_summary_for_report = mapping_summary_ch.ifEmpty {
-        def f = file("${workDir}/NO_MAPPING_SUMMARY.txt")
-        f.text = "No mapping performed"
-        return f
-    }
+    mapping_summary_for_report = mapping_summary_ch[0].ifEmpty {
+            def f = file("${workDir}/NO_MAPPING_SUMMARY.txt")
+            f.text = "No mapping performed"
+            return f
+        }
 
     // Create placeholders once for any non-actual outputs
     placeholder_outputs = create_placeholders()
@@ -474,7 +474,7 @@ workflow {
     
     // Handle insert size violin
     if (params.genome || params.accession || params.assembly_mode == "denovo") {
-        final_insert_size_violin = samtools_summary.out[1]
+        final_insert_size_violin = mapping_summary_ch[1]
     } else {
         final_insert_size_violin = placeholder_outputs[2]
     }
