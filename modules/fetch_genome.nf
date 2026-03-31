@@ -2,6 +2,8 @@ process fetch_genome {
     label 'fetch_genome'
     tag "$accession"
 
+    publishDir "${params.outdir}/genome", mode: params.publish_dir_mode
+
     input:
         val accession
 

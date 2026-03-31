@@ -3,7 +3,7 @@ process assemble_rainbow {
     label 'denovo_assembly'
     tag "rainbow_assembly"
     
-    publishDir "${params.outdir}/denovo_assembly", mode: 'copy'
+    publishDir "${params.outdir}/denovo_assembly", mode: params.publish_dir_mode
     
     input:
         path(uniq_fasta)

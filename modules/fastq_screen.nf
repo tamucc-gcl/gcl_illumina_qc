@@ -2,6 +2,8 @@ process fastq_screen {
     label 'fastq_screen'
     tag "$sample_id"
 
+    // publishDir "${params.outdir}/fqgz/fq_screen", mode: params.publish_dir_mode
+
     input:
         tuple val(sample_id), path(read), val(read_num)
         path(config_file)

@@ -5,7 +5,7 @@ process stage_local_genome {
     label 'stage_genome'
     tag "$genome_file"
     
-    publishDir "${params.outdir}/genome", mode: 'copy', pattern: "genome.fa"
+    publishDir "${params.outdir}/genome", mode: params.publish_dir_mode, pattern: "genome.fa"
 
     input:
         path genome_file

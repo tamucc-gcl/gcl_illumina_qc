@@ -2,6 +2,8 @@
 process samtools_summary {
     label 'samtools_summary'
     tag "mapping_summary"
+
+    // publishDir "${params.outdir}/qc", mode: params.publish_dir_mode
     
     input:
         path(stats_files)

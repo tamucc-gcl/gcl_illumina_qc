@@ -3,7 +3,7 @@ process extract_unique_seqs {
     label 'uniq_seqs'
     tag "$sample_id"
     
-    //publishDir "${params.outdir}/denovo_assembly/unique_seqs", mode: 'copy', pattern: "*.uniq.seqs"
+    //publishDir "${params.outdir}/denovo_assembly/unique_seqs", mode: params.publish_dir_mode, pattern: "*.uniq.seqs"
     
     input:
         tuple val(sample_id), path(read1), path(read2)

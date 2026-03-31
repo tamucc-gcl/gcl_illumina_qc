@@ -2,7 +2,7 @@ process generate_report {
     label 'generate_report'
     tag "final_report"
     
-    publishDir "${params.outdir}", mode: 'copy'
+    publishDir "${params.outdir}", mode: params.publish_dir_mode
     
     input:
         path qc_plot
@@ -459,7 +459,7 @@ multiqc_links = []
 for mqc_file in sorted_multiqc:
     for stage, name in stage_names.items():
         if stage in mqc_file:
-            multiqc_links.append(f"- [{name}](${params.outdir}/multiqc_reports/{mqc_file})")
+            multiqc_links.append(f"- [{name}](${params.outdir}/qc/multiqc_reports/{mqc_file})")
             break
 
 # ----------------------------------------------------------------
@@ -568,7 +568,7 @@ if mapping_performed and final_stats["n"] > 0:
     mapping_section = (
         "## Mapped Reads\\n"
         "\\n"
-        "![Mapped Read Distribution](${params.outdir}/qc_analysis/mapped_reads_histogram.png)\\n"
+        "![Mapped Read Distribution](${params.outdir}/qc/mapped_reads_histogram.png)\\n"
         "\\n"
         f"**Summary Statistics (n={final_stats['n']} samples):**\\n"
         f"- Mean reads per sample: {fmt_num(final_stats['mean'])}\\n"
@@ -583,7 +583,7 @@ if mapping_performed and final_stats["n"] > 0:
         f"{mapped_retention_pct}\\n"
         "\\n"
         "### Final Mapping Statistics\\n"
-        "See [${mapping_summary}](${params.outdir}/qc_analysis/${mapping_summary}) for detailed mapping statistics per sample."
+        "See [${mapping_summary}](${params.outdir}/qc/${mapping_summary}) for detailed mapping statistics per sample."
     )
 
 
@@ -598,7 +598,7 @@ markdown_content = f'''# GCL Illumina QC Pipeline Report
 
 ## Initial Sequencing
 
-![Initial Read Distribution](${params.outdir}/qc_analysis/initial_reads_histogram.png)
+![Initial Read Distribution](${params.outdir}/qc/initial_reads_histogram.png)
 
 **Summary Statistics (n={initial_stats["n"]} samples):**
 - Mean reads per sample: {fmt_num(initial_stats["mean"])}
@@ -614,13 +614,13 @@ markdown_content = f'''# GCL Illumina QC Pipeline Report
 ## Sequencing QC
 
 ### Read Retention Through QC Pipeline
-![QC Summary Plot](${params.outdir}/qc_analysis/qc_summary_plot.png)
+![QC Summary Plot](${params.outdir}/qc/qc_summary_plot.png)
 
 ### MultiQC Reports (download locally to view)
 {chr(10).join(multiqc_links) if multiqc_links else "No MultiQC reports found"}
 
 ### Stage-by-Stage Comparison
-See [stage_comparison.txt](${params.outdir}/qc_analysis/stage_comparison.txt) for detailed retention rates between stages.
+See [stage_comparison.txt](${params.outdir}/qc/stage_comparison.txt) for detailed retention rates between stages.
 
 {cleaned_section}
 

@@ -5,6 +5,8 @@ process fastqc_raw {
     label 'fastqc'
     tag "$sample_id"
 
+    // publishDir "${params.outdir}/qc/fastqc", mode: params.publish_dir_mode
+
     input:
         tuple val(sample_id), path(read1), path(read2)
 

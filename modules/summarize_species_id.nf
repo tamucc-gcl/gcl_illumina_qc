@@ -3,8 +3,8 @@ process summarize_species_id {
     label 'species_summary'
     tag "species_identification_summary"
     
-    publishDir "${params.outdir}/species_id", mode: 'copy', pattern: "*.{tsv,png,csv}"
-    publishDir "${params.outdir}/species_id/blast_posteriors", mode: 'copy', pattern: "blast_posteriors/*.csv"
+    publishDir "${params.outdir}/species_id", mode: params.publish_dir_mode, pattern: "*.{tsv,png,csv}"
+    publishDir "${params.outdir}/species_id/blast_posteriors", mode: params.publish_dir_mode, pattern: "blast_posteriors/*.csv"
     
     input:
         path(blast_results)  // Collected blast result files from all samples
@@ -64,7 +64,7 @@ process summarize_species_id {
     echo "Running R analysis for species identification..."
     
     # Copy R script from module directory to working directory
-    cp ${projectDir}/modules/blast_summary.R .
+    cp ${projectDir}/r_scripts/blast_summary.R .
     
     # Run the R script
     Rscript blast_summary.R

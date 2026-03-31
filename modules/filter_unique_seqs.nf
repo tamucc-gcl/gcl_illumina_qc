@@ -3,7 +3,7 @@ process filter_unique_seqs {
     label 'denovo_assembly'
     tag "filtering"
     
-    //publishDir "${params.outdir}/denovo_assembly/filtered", mode: 'copy'
+    //publishDir "${params.outdir}/denovo_assembly/filtered", mode: params.publish_dir_mode
     
     input:
         path(uniq_seq_files)

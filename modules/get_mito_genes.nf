@@ -2,6 +2,8 @@ process get_mito_genes {
     label 'get_mito_genes'
     tag   "${sample_id}"
 
+    // publishDir "${params.outdir}/species_id/mito_genes", mode: params.publish_dir_mode
+
     input:
         tuple val(sample_id), path(read1), path(read2)
         path(mito_reference)

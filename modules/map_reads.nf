@@ -2,6 +2,8 @@ process map_reads {
     label 'map_reads'
     tag "$sample_id"
 
+    publishDir "${params.outdir}/bam", mode: params.publish_dir_mode
+
     input:
         tuple val(sample_id), path(read1), path(read2)
         tuple path(genome), val(genome_path), path(index_files)

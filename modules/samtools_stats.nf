@@ -2,6 +2,8 @@ process samtools_stats {
     label 'samtools_stats'
     tag "$sample_id"
 
+    // publishDir "${params.outdir}/qc/bamstats", mode: params.publish_dir_mode
+
     input:
         tuple val(sample_id), path(bam), path(bam_index)
 
