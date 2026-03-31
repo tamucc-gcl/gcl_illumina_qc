@@ -220,7 +220,7 @@ elif genome_source.startswith("accession:"):
 elif genome_source.startswith("local:"):
     genome_path = genome_source.replace("local:", "")
     species_name = ""
-    reference_line = f"Reference genome used: Local file - \`{genome_path}\`"
+    reference_line = f"Reference genome used: Local file - '{genome_path}'"
 elif genome_source.startswith("none:"):
     species_name = ""
     reference_line = "No reference genome used - cleaned reads output only"
