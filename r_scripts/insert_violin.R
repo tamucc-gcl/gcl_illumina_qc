@@ -3,6 +3,7 @@ library(dplyr)
 library(readr)
 library(stringr)
 library(forcats)
+library(tidyr)
 library(ggplot2)
 
 insert_size_data <- list.files(pattern = 'stats$') |>
