@@ -17,10 +17,16 @@ insert_size_data <- list.files(pattern = 'stats$') |>
                           'other_pairs'),
            sep = '\t', convert = TRUE) |>
   select(-IS) |>
-  filter(insert_size < 1000, pairs_total > 0) |>
-  mutate(sample_id = fct_reorder(sample_id, insert_size,
-                                 .fun = function(x, w) weighted.mean(x, w),
-                                 w = pairs_total))
+  filter(insert_size < 1000, pairs_total > 0)
+
+# Order samples by weighted mean insert size
+sample_order <- insert_size_data |>
+  group_by(sample_id) |>
+  summarise(wmean = weighted.mean(insert_size, pairs_total), .groups = "drop") |>
+  arrange(wmean)
+
+insert_size_data <- insert_size_data |>
+  mutate(sample_id = factor(sample_id, levels = sample_order$sample_id))
 
 # Extract number of samples
 n_samples <- n_distinct(insert_size_data$sample_id)
