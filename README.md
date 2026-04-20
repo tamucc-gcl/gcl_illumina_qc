@@ -1,4 +1,4 @@
-# GCL Illumina QC Pipeline
+# GCL Illumina QC Pipeline [![DOI](https://zenodo.org/badge/1019725764.svg)](https://doi.org/10.5281/zenodo.19666434)
 
 <!---![](pipeline_dag.png)--->
 
