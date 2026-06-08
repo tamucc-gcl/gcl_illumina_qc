@@ -317,7 +317,7 @@ workflow {
         
         // MultiQC for mapping
         multiqc_mapping_out = multiqc_mapping(
-            samtools_stats.out
+            samtools_stats.out[0]
                 .map{ sid, stats, flagstats -> [stats, flagstats] }
                 .flatten()
                 .collect(),
