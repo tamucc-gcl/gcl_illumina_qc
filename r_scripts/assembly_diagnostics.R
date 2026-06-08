@@ -68,7 +68,9 @@ if (nrow(curve) < 3) write_default(val = max(2L, min(curve$x)),
 # Curves are monotonically decreasing and convex (steep drop -> flat tail).
 # Normalize to [0,1], draw the chord between endpoints; the knee is the point of
 # maximum vertical gap between the chord and the curve.
+# change to use log10 to scale y better for post-clumpify results
 find_knee <- function(x, y) {
+  y <- log10(pmax(y, 1))          # ← compress the orders-of-magnitude drop
   xn <- (x - min(x)) / (max(x) - min(x))
   yn <- (y - min(y)) / (max(y) - min(y))
   chord <- yn[1] + (yn[length(yn)] - yn[1]) * (xn - xn[1]) / (xn[length(xn)] - xn[1])
@@ -76,7 +78,9 @@ find_knee <- function(x, y) {
 }
 
 knee <- as.integer(round(find_knee(curve$x, curve$n)))
-knee <- max(2L, min(knee, max(curve$x)))
+# cap kept low for deduplicated (Clumpify'd) input so cutoffs don't over-prune
+if (mode == "cutoff1") knee <- max(2L, min(knee, 5L))
+if (mode == "cutoff2") knee <- max(2L, min(knee, 4L))
 writeLines(as.character(knee), value_file)
 
 # ---- Plot ---------------------------------------------------------------------
