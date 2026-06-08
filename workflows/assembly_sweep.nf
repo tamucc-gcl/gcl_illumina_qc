@@ -37,7 +37,7 @@ workflow assembly_sweep {
 
         // cutoff combos + the shared uniq files -> (meta[c1,c2], files)
         filter_in = c1_vals.combine(c2_vals)
-            .combine(all_uniq_seqs)
+            .combine(all_uniq_seqs.map{ [it] })
             .map{ c1, c2, files ->
                 tuple([c1: c1, c2: c2, id_cutoff: "c${c1}_k${c2}"], files)
             }
