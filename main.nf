@@ -543,7 +543,7 @@ workflow {
         final_species_blast,         // BLAST results TSV
         final_species_raw_pie,       // Raw BLAST pie chart
         final_species_summary_pie,   // Summary BLAST pie chart
-        final_species_top_hits       // Top BLAST hits CSV
+        final_species_top_hits,       // Top BLAST hits CSV
         final_cutoff1_plot,          // NEW: de novo cutoff1 diagnostic plot
         final_cutoff2_plot           // NEW: de novo cutoff2 diagnostic plot
     )
