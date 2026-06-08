@@ -30,11 +30,11 @@ workflow denovo_assembly {
         //          A non-null params value overrides the auto-detected one.
         cutoff1_ch = (params.cutoff1 != null)
             ? Channel.value( params.cutoff1 as int )
-            : assembly_diagnostics.out.cutoff1_value.map{ f -> f.text.trim() as int }.first()
+            : assembly_diagnostics.out.cutoff1_value.map{ f -> f.text.trim() as int }
 
         cutoff2_ch = (params.cutoff2 != null)
             ? Channel.value( params.cutoff2 as int )
-            : assembly_diagnostics.out.cutoff2_value.map{ f -> f.text.trim() as int }.first()
+            : assembly_diagnostics.out.cutoff2_value.map{ f -> f.text.trim() as int }
 
         // Step 3: Filter unique sequences with resolved cutoffs
         filter_unique_seqs(
