@@ -32,14 +32,17 @@ params.taxonomy_db = "/work/birdlab/databases/ncbi_taxonomy" // Path to local NC
 // Assembly parameters
 params.cutoff1 = null       // Min reads per individual (null = auto-detect from data)
 params.cutoff2 = null       // Min individuals (null = auto-detect from data)  
-params.cluster_similarity = 0.8 // used when do_cluster_sweep = false; ignored during a sweep
+params.cluster_similarity = 0.8 // used when do_sweep = false; ignored during a sweep
 params.div_f = 0.5
 params.div_K = 10
 params.merge_r = 2
 params.final_similarity = 0.9
-params.do_cluster_sweep = true                          // sweep cluster_similarity to auto-pick the best
-params.sweep_cluster_similarity = [0.80, 0.85, 0.90, 0.95]  // grid to test
-params.sweep_n_samples = 8        
+
+params.do_sweep = true                                     // sweep cutoffs + cluster_similarity, pick best by map-back
+params.sweep_cluster_similarity = [0.80, 0.85, 0.90, 0.95]  // cluster_similarity grid
+params.cutoff_sweep_floor = 2                               // low end of cutoff1/cutoff2 grids (knee = high end)
+params.sweep_sample_pct = 25                                // % of samples mapped back to score each candidate (100 = all)
+params.sweep_seed = 42                                      // seed for the random sample subset
 
 //--------------------------------------------------------------------
 // DERIVED PARAMETERS
@@ -505,7 +508,7 @@ workflow {
     // Handle assembly stats
     if (params.assembly_mode == "denovo") {
         final_assembly_stats = assembly_stats_ch
-        final_filter_stats = filter_stats_ch
+        final_filter_stats = filter_stats_ch.ifEmpty { placeholder_outputs[1] }
         final_cutoff1_plot = cutoff1_plot_ch
         final_cutoff2_plot = cutoff2_plot_ch
         final_sweep_plot = sweep_plot_ch.ifEmpty { placeholder_outputs[11] }
