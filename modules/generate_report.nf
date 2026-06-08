@@ -23,6 +23,8 @@ process generate_report {
         path species_top_hits
         path cutoff1_plot          // NEW (de novo diagnostics)
         path cutoff2_plot          // NEW (de novo diagnostics)
+        path sweep_plot            // NEW (cluster_similarity sweep)
+        path sweep_summary         // NEW (cluster_similarity sweep)
         
     output:
         path "qc_pipeline_report.md"
@@ -79,6 +81,13 @@ process generate_report {
         export DIAG_PLOTS_PERFORMED="false"
     fi
     
+    # Check if a cluster_similarity sweep was performed
+    if [ "\$ASSEMBLY_PERFORMED" == "true" ] && [ -f "${sweep_plot}" ] && [[ "${sweep_plot}" != *"no_"* ]]; then
+        export SWEEP_PERFORMED="true"
+    else
+        export SWEEP_PERFORMED="false"
+    fi
+    
     # Check if species ID was performed
     if [[ "${species_blast_tsv}" == *"NO_SPECIES"* ]] || [[ "${species_blast_tsv}" == *"no_species"* ]]; then
         export SPECIES_ID_PERFORMED="false"
@@ -108,6 +117,7 @@ assembly_performed         = os.environ.get("ASSEMBLY_PERFORMED", "false") == "t
 filter_performed           = os.environ.get("FILTER_PERFORMED", "false") == "true"
 species_id_performed       = os.environ.get("SPECIES_ID_PERFORMED", "false") == "true"
 diag_plots_performed       = os.environ.get("DIAG_PLOTS_PERFORMED", "false") == "true"
+sweep_performed            = os.environ.get("SWEEP_PERFORMED", "false") == "true"
 
 # ----------------------------------------------------------------
 # Genome / reference section  (unchanged from your current version)
@@ -128,6 +138,42 @@ if genome_source.startswith("denovo:"):
         assembly_info.append(f"![Cutoff 1 selection](${params.outdir}/denovo_assembly/diagnostics/cutoff1_curve.png)")
         assembly_info.append("")
         assembly_info.append(f"![Cutoff 2 selection](${params.outdir}/denovo_assembly/diagnostics/cutoff2_curve.png)")
+        assembly_info.append("")
+
+    if sweep_performed:
+        assembly_info.append("### Cluster-Similarity Sweep")
+        assembly_info.append("")
+        try:
+            import csv as _csv
+            with open("${sweep_summary}", 'r') as f:
+                sweep_rows = list(_csv.DictReader(f, delimiter='\\t'))
+        except Exception as e:
+            sweep_rows = []
+            print(f"Could not read sweep summary: {e}")
+
+        selected_sim = sweep_rows[0]['sim'] if sweep_rows else "unknown"
+        assembly_info.append(
+            f"A candidate reference was assembled at each `cluster_similarity` value, then a subset of samples was mapped back to score them. Selected value: **{selected_sim}** (highest composite of mapping rate, properly-paired rate, low soft-clipping, and alignment score)."
+        )
+        assembly_info.append("")
+        assembly_info.append(f"![Cluster-similarity sweep comparison](${params.outdir}/denovo_assembly/sweep/sweep_comparison.png)")
+        assembly_info.append("")
+
+        if sweep_rows:
+            def _fmt(row, key, nd=2):
+                try:
+                    return f"{float(row.get(key,'')):.{nd}f}"
+                except Exception:
+                    return row.get(key, '')
+            assembly_info.append("| cluster_similarity | n samples | mapping % | properly paired % | soft-clip/read | mean AS | composite |")
+            assembly_info.append("|---|---|---|---|---|---|---|")
+            for r in sweep_rows:
+                mark = " (selected)" if r.get('sim') == selected_sim else ""
+                assembly_info.append(
+                    f"| {r.get('sim','')}{mark} | {r.get('n_samples','')} | {_fmt(r,'map_rate')} | {_fmt(r,'pp_rate')} | {_fmt(r,'softclip_per_read')} | {_fmt(r,'mean_AS')} | {_fmt(r,'composite',3)} |"
+                )
+            assembly_info.append("")
+        assembly_info.append(f"Full ranked table: [sweep_summary.tsv](${params.outdir}/denovo_assembly/sweep/sweep_summary.tsv)")
         assembly_info.append("")
 
     if filter_performed:

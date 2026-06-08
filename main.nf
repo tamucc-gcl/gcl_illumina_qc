@@ -32,11 +32,14 @@ params.taxonomy_db = "/work/birdlab/databases/ncbi_taxonomy" // Path to local NC
 // Assembly parameters
 params.cutoff1 = null       // Min reads per individual (null = auto-detect from data)
 params.cutoff2 = null       // Min individuals (null = auto-detect from data)  
-params.cluster_similarity = 0.8
+params.cluster_similarity = 0.8 // used when do_cluster_sweep = false; ignored during a sweep
 params.div_f = 0.5
 params.div_K = 10
 params.merge_r = 2
 params.final_similarity = 0.9
+params.do_cluster_sweep = true                          // sweep cluster_similarity to auto-pick the best
+params.sweep_cluster_similarity = [0.80, 0.85, 0.90, 0.95]  // grid to test
+params.sweep_n_samples = 8        
 
 //--------------------------------------------------------------------
 // DERIVED PARAMETERS
@@ -290,6 +293,8 @@ workflow {
         filter_stats_ch = Channel.empty()
         cutoff1_plot_ch = Channel.empty()
         cutoff2_plot_ch = Channel.empty()
+        sweep_plot_ch = Channel.empty()
+        sweep_summary_ch = Channel.empty()
         
     } else if (params.assembly_mode == "denovo") {
         // Option 2: De novo assembly workflow
@@ -303,6 +308,8 @@ workflow {
         filter_stats_ch = denovo_assembly.out.filter_stats
         cutoff1_plot_ch = denovo_assembly.out.cutoff1_plot
         cutoff2_plot_ch = denovo_assembly.out.cutoff2_plot
+        sweep_plot_ch = denovo_assembly.out.sweep_plot
+        sweep_summary_ch = denovo_assembly.out.sweep_summary
         
         // Use the de novo assembly as reference genome
         log.info "Indexing de novo assembly"
@@ -355,6 +362,8 @@ workflow {
         filter_stats_ch = Channel.empty()
         cutoff1_plot_ch = Channel.empty()
         cutoff2_plot_ch = Channel.empty()
+        sweep_plot_ch = Channel.empty()
+        sweep_summary_ch = Channel.empty()
     }
 
     //----------------------------------------------------------------
@@ -439,6 +448,8 @@ workflow {
             path "no_aln_score_violin.png"    // [8] NEW
             path "no_cutoff1_curve.png"       // [9] NEW
             path "no_cutoff2_curve.png"       // [10] NEW
+            path "no_sweep_plot.png"          // [11] NEW
+            path "no_sweep_summary.tsv"       // [12] NEW
         
         script:
         """
@@ -453,6 +464,8 @@ workflow {
         echo "No mapping performed"             > no_aln_score_violin.png
         echo "No assembly performed"            > no_cutoff1_curve.png
         echo "No assembly performed"            > no_cutoff2_curve.png
+        echo "No sweep performed"               > no_sweep_plot.png
+        echo "No sweep performed"               > no_sweep_summary.tsv
         """
     }
     
@@ -495,11 +508,15 @@ workflow {
         final_filter_stats = filter_stats_ch
         final_cutoff1_plot = cutoff1_plot_ch
         final_cutoff2_plot = cutoff2_plot_ch
+        final_sweep_plot = sweep_plot_ch.ifEmpty { placeholder_outputs[11] }
+        final_sweep_summary = sweep_summary_ch.ifEmpty { placeholder_outputs[12] }
     } else {
         final_assembly_stats = placeholder_outputs[0]
         final_filter_stats = placeholder_outputs[1]
         final_cutoff1_plot = placeholder_outputs[9]
         final_cutoff2_plot = placeholder_outputs[10]
+        final_sweep_plot = placeholder_outputs[11]
+        final_sweep_summary = placeholder_outputs[12]
     }
     
     // Handle insert size violin
@@ -546,6 +563,8 @@ workflow {
         final_species_top_hits,       // Top BLAST hits CSV
         final_cutoff1_plot,          // NEW: de novo cutoff1 diagnostic plot
         final_cutoff2_plot           // NEW: de novo cutoff2 diagnostic plot
+        final_sweep_plot,            // NEW: cluster_similarity sweep comparison plot
+        final_sweep_summary          // NEW: cluster_similarity sweep ranked table
     )
 }
 
