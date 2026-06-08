@@ -30,8 +30,8 @@ params.blast_db = "/work/birdlab/databases/midori2_latest/CO1/midori2_latest"  /
 params.taxonomy_db = "/work/birdlab/databases/ncbi_taxonomy" // Path to local NCBI Taxonomy database
 
 // Assembly parameters
-params.cutoff1 = 4          // Minimum reads per individual
-params.cutoff2 = 4          // Minimum number of individuals  
+params.cutoff1 = null       // Min reads per individual (null = auto-detect from data)
+params.cutoff2 = null       // Min individuals (null = auto-detect from data)  
 params.cluster_similarity = 0.8
 params.div_f = 0.5
 params.div_K = 10
@@ -288,6 +288,8 @@ workflow {
         // No assembly stats for reference genome mode - create empty placeholder files inline
         assembly_stats_ch = Channel.empty()
         filter_stats_ch = Channel.empty()
+        cutoff1_plot_ch = Channel.empty()
+        cutoff2_plot_ch = Channel.empty()
         
     } else if (params.assembly_mode == "denovo") {
         // Option 2: De novo assembly workflow
@@ -299,6 +301,8 @@ workflow {
         // Capture assembly statistics
         assembly_stats_ch = denovo_assembly.out.assembly_stats
         filter_stats_ch = denovo_assembly.out.filter_stats
+        cutoff1_plot_ch = denovo_assembly.out.cutoff1_plot
+        cutoff2_plot_ch = denovo_assembly.out.cutoff2_plot
         
         // Use the de novo assembly as reference genome
         log.info "Indexing de novo assembly"
@@ -349,6 +353,8 @@ workflow {
         // No assembly stats for no-genome mode - create empty placeholder files inline
         assembly_stats_ch = Channel.empty()
         filter_stats_ch = Channel.empty()
+        cutoff1_plot_ch = Channel.empty()
+        cutoff2_plot_ch = Channel.empty()
     }
 
     //----------------------------------------------------------------
@@ -431,6 +437,8 @@ workflow {
             path "no_species_top_hits.csv"
             path "no_soft_clip_violin.png"    // [7] NEW
             path "no_aln_score_violin.png"    // [8] NEW
+            path "no_cutoff1_curve.png"       // [9] NEW
+            path "no_cutoff2_curve.png"       // [10] NEW
         
         script:
         """
@@ -443,6 +451,8 @@ workflow {
         echo "No species identification performed" > no_species_top_hits.csv
         echo "No mapping performed"             > no_soft_clip_violin.png
         echo "No mapping performed"             > no_aln_score_violin.png
+        echo "No assembly performed"            > no_cutoff1_curve.png
+        echo "No assembly performed"            > no_cutoff2_curve.png
         """
     }
     
@@ -483,9 +493,13 @@ workflow {
     if (params.assembly_mode == "denovo") {
         final_assembly_stats = assembly_stats_ch
         final_filter_stats = filter_stats_ch
+        final_cutoff1_plot = cutoff1_plot_ch
+        final_cutoff2_plot = cutoff2_plot_ch
     } else {
         final_assembly_stats = placeholder_outputs[0]
         final_filter_stats = placeholder_outputs[1]
+        final_cutoff1_plot = placeholder_outputs[9]
+        final_cutoff2_plot = placeholder_outputs[10]
     }
     
     // Handle insert size violin
@@ -530,6 +544,8 @@ workflow {
         final_species_raw_pie,       // Raw BLAST pie chart
         final_species_summary_pie,   // Summary BLAST pie chart
         final_species_top_hits       // Top BLAST hits CSV
+        final_cutoff1_plot,          // NEW: de novo cutoff1 diagnostic plot
+        final_cutoff2_plot           // NEW: de novo cutoff2 diagnostic plot
     )
 }
 

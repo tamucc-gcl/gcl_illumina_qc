@@ -21,6 +21,8 @@ process generate_report {
         path species_raw_pie
         path species_summary_pie
         path species_top_hits
+        path cutoff1_plot          // NEW (de novo diagnostics)
+        path cutoff2_plot          // NEW (de novo diagnostics)
         
     output:
         path "qc_pipeline_report.md"
@@ -70,6 +72,13 @@ process generate_report {
         export FILTER_PERFORMED="true"
     fi
     
+    # Check if de novo cutoff diagnostic plots exist
+    if [ "\$ASSEMBLY_PERFORMED" == "true" ] && [ -f "${cutoff1_plot}" ] && [[ "${cutoff1_plot}" != *"no_"* ]] && [ -f "${cutoff2_plot}" ] && [[ "${cutoff2_plot}" != *"no_"* ]]; then
+        export DIAG_PLOTS_PERFORMED="true"
+    else
+        export DIAG_PLOTS_PERFORMED="false"
+    fi
+    
     # Check if species ID was performed
     if [[ "${species_blast_tsv}" == *"NO_SPECIES"* ]] || [[ "${species_blast_tsv}" == *"no_species"* ]]; then
         export SPECIES_ID_PERFORMED="false"
@@ -98,6 +107,7 @@ aln_score_performed        = os.environ.get("ALN_SCORE_PERFORMED", "false") == "
 assembly_performed         = os.environ.get("ASSEMBLY_PERFORMED", "false") == "true"
 filter_performed           = os.environ.get("FILTER_PERFORMED", "false") == "true"
 species_id_performed       = os.environ.get("SPECIES_ID_PERFORMED", "false") == "true"
+diag_plots_performed       = os.environ.get("DIAG_PLOTS_PERFORMED", "false") == "true"
 
 # ----------------------------------------------------------------
 # Genome / reference section  (unchanged from your current version)
@@ -109,6 +119,16 @@ assembly_section = ""
 if genome_source.startswith("denovo:"):
     species_name = ""
     assembly_info = []
+
+    if diag_plots_performed:
+        assembly_info.append("### Cutoff Selection (auto-detected from data)")
+        assembly_info.append("")
+        assembly_info.append("Cutoffs were selected by knee detection on the unique-sequence retention curves below. Override with `--cutoff1` / `--cutoff2` if needed.")
+        assembly_info.append("")
+        assembly_info.append(f"![Cutoff 1 selection](${params.outdir}/denovo_assembly/diagnostics/cutoff1_curve.png)")
+        assembly_info.append("")
+        assembly_info.append(f"![Cutoff 2 selection](${params.outdir}/denovo_assembly/diagnostics/cutoff2_curve.png)")
+        assembly_info.append("")
 
     if filter_performed:
         try:

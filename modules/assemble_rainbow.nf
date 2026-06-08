@@ -20,6 +20,10 @@ process assemble_rainbow {
         //path("rainbow.fasta"), emit: rainbow_assembly
     
     script:
+    def cdhit_n = { c ->
+        c >= 0.95 ? 10 : c >= 0.90 ? 8 : c >= 0.88 ? 7 :
+        c >= 0.85 ? 6  : c >= 0.80 ? 5 : 4
+    }
     """
     echo "Starting Rainbow assembly pipeline"
     echo "Parameters:"
@@ -35,6 +39,7 @@ process assemble_rainbow {
     # Initial clustering with CD-HIT
     echo "Running initial CD-HIT clustering..."
     cd-hit-est -i uniq.F.fasta \
+               -n ${cdhit_n(cluster_similarity)} \
                -o xxx \
                -c ${cluster_similarity} \
                -T ${task.cpus} \
@@ -99,6 +104,7 @@ process assemble_rainbow {
     # Final clustering to remove redundancy
     echo "Final CD-HIT clustering to remove redundancy..."
     cd-hit-est -i rainbow.fasta \
+               -n ${cdhit_n(final_similarity)} \
                -o denovo_reference.fa \
                -M 0 \
                -T ${task.cpus} \
