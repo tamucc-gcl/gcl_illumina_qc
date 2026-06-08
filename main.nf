@@ -508,11 +508,17 @@ workflow {
     // Handle assembly stats
     if (params.assembly_mode == "denovo") {
         final_assembly_stats = assembly_stats_ch
-        final_filter_stats = filter_stats_ch.ifEmpty { placeholder_outputs[1] }
         final_cutoff1_plot = cutoff1_plot_ch
         final_cutoff2_plot = cutoff2_plot_ch
-        final_sweep_plot = sweep_plot_ch.ifEmpty { placeholder_outputs[11] }
-        final_sweep_summary = sweep_summary_ch.ifEmpty { placeholder_outputs[12] }
+        if (params.do_sweep) {
+            final_filter_stats  = placeholder_outputs[1]
+            final_sweep_plot    = sweep_plot_ch
+            final_sweep_summary = sweep_summary_ch
+        } else {
+            final_filter_stats  = filter_stats_ch
+            final_sweep_plot    = placeholder_outputs[11]
+            final_sweep_summary = placeholder_outputs[12]
+        }
     } else {
         final_assembly_stats = placeholder_outputs[0]
         final_filter_stats = placeholder_outputs[1]
