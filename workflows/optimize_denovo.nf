@@ -24,6 +24,8 @@ nextflow.enable.dsl = 2
 include { extract_unique_seqs }  from '../modules/extract_unique_seqs.nf'
 include { assembly_diagnostics } from '../modules/assembly_diagnostics.nf'
 include { split_pseudo_rep }     from '../modules/split_pseudo_rep.nf'
+include { filter_unique_seqs_candidate } from '../modules/filter_unique_seqs_candidate.nf'
+include { assemble_rainbow_candidate }   from '../modules/assemble_rainbow_candidate.nf'
 
 // ---------------------------------------------------------------------------
 // STUB PROCESSES — echo placeholders. Replaced in later chunks.
@@ -31,23 +33,8 @@ include { split_pseudo_rep }     from '../modules/split_pseudo_rep.nf'
 // the channel graph is exercised end to end.
 // ---------------------------------------------------------------------------
 
-// Stand-in for: build one candidate reference per (c1,c2,sim) grid point.
-// Real version = filter_unique_seqs + assemble_rainbow per meta (chunk 3).
-process stub_build_candidate {
-    label 'basic'
-    tag "${meta.id}"
-    input:
-        tuple val(meta), path(uniq_seqs)
-    output:
-        tuple val(meta), path("candidate_${meta.id}.fa"), emit: candidate
-    script:
-    """
-    echo "[STUB] would assemble candidate ${meta.id} (c1=${meta.c1} c2=${meta.c2} sim=${meta.sim})"
-    echo "[STUB] uniq.seqs files staged: \$(ls *.uniq.seqs 2>/dev/null | wc -l)"
-    echo ">stub_contig_${meta.id}" >  candidate_${meta.id}.fa
-    echo "ACGTACGTACGTACGT"        >> candidate_${meta.id}.fa
-    """
-}
+// (chunk 3a) stub_build_candidate REMOVED — real candidates now come from
+// filter_unique_seqs_candidate + assemble_rainbow_candidate.
 
 // Stand-in for: cheap signals (1a inflection, 1b redundancy, 5b NB-mixture, 2 anchor)
 // per candidate -> one provisional-score row. Real version = chunks 3.
@@ -158,40 +145,87 @@ workflow optimize_denovo {
         cleaned_reads          // tuple(sample_id, r1, r2) — repaired reads (intact)
 
     main:
-        // ----- ASSEMBLY BRANCH: intact subset -> per-sample uniq.seqs -----
+        // ----- ASSEMBLY BRANCH: intact SUBSET -> per-sample uniq.seqs -----
         // Deterministic subset by percentage (overlap with concordance allowed).
-        // (Subset logic is a stub here — chunk 3 wires the seeded shuffle/take.)
-        assembly_subset = cleaned_reads   // STUB: use all; real subset in chunk 3
+        // Seeded shuffle then take ceil(pct%) so -resume is cache-stable.
+        def pct  = (params.optimize_sample_pct ?: 100) as int
+        def seed = (params.optimize_seed ?: 42) as long
+
+        assembly_subset = ( pct >= 100 )
+            ? cleaned_reads
+            : cleaned_reads
+                .toList()
+                .flatMap { rows ->
+                    def shuffled = new ArrayList(rows)
+                    Collections.shuffle(shuffled, new Random(seed))
+                    int n = Math.max(1, (int) Math.ceil(rows.size() * pct / 100.0))
+                    shuffled.take(n)
+                }
 
         extract_unique_seqs( assembly_subset )
         all_uniq_seqs = extract_unique_seqs.out.uniq_seqs
             .map{ sid, f -> f }
             .collect()
 
-        // Diagnostics: knee values (grid ceilings) + curves + NB-mixture (5b later)
+        // Diagnostics: knee values (grid CEILINGS) + curves + NB-mixture (5b later)
         assembly_diagnostics( all_uniq_seqs )
 
-        // ----- Build the (c1,c2,sim) grid (STUB: tiny fixed grid) -----
-        // Chunk 3 derives c1/c2 ranges from floor..knee (or pinned params) and
-        // crosses with params.optimize_cluster_similarity. For topology testing
-        // we use a hardcoded 2x1x1 grid so the graph has multiple candidates.
-        grid = Channel.fromList([
-            [id:'c2_k2_s0.90', c1:2, c2:2, sim:0.90],
-            [id:'c3_k3_s0.90', c1:3, c2:3, sim:0.90]
-        ])
+        // ----- Build the (c1,c2,sim) grid from floor..knee (or pinned params) -----
+        // Knee values are read from diagnostics .value files and act as CEILINGS.
+        // Explicit --cutoff1/--cutoff2 PIN that dimension to a single value.
+        def floor = (params.cutoff_floor ?: 2) as int
 
-        // Pair each grid meta with the collected uniq.seqs (wrap list to keep it one slot)
-        candidate_in = grid.combine( all_uniq_seqs.map{ [it] } )
-            .map{ meta, files -> tuple(meta, files) }
+        c1_vals = (params.cutoff1 != null)
+            ? Channel.value( [ params.cutoff1 as int ] )
+            : assembly_diagnostics.out.cutoff1_value
+                .map { f -> def k = f.text.trim() as int; (floor..Math.max(floor, k)).toList() }
+        c2_vals = (params.cutoff2 != null)
+            ? Channel.value( [ params.cutoff2 as int ] )
+            : assembly_diagnostics.out.cutoff2_value
+                .map { f -> def k = f.text.trim() as int; (floor..Math.max(floor, k)).toList() }
 
-        stub_build_candidate( candidate_in )
-        candidates = stub_build_candidate.out.candidate
+        // Cutoff combos = c1 x c2 (filtering is similarity-INDEPENDENT, so filter
+        // runs ONCE per (c1,c2) and is later crossed with similarities).
+        cutoff_combos = c1_vals
+            .combine( c2_vals )
+            .flatMap { c1list, c2list ->
+                def out = []
+                for (c1 in c1list) for (c2 in c2list) {
+                    out << [ c1: c1 as int, c2: c2 as int, id_cutoff: "c${c1}_k${c2}".toString() ]
+                }
+                out
+            }
+
+        // Pair each cutoff meta with the collected uniq.seqs (wrap list -> one slot)
+        filter_in = cutoff_combos
+            .combine( all_uniq_seqs.map{ [it] } )
+            .map { meta, files -> tuple(meta, files) }
+
+        filter_unique_seqs_candidate( filter_in )
+
+        // Cross each filtered (c1,c2) result with the similarity grid -> full candidate set.
+        sims = Channel.fromList( params.optimize_cluster_similarity )
+
+        assemble_in = filter_unique_seqs_candidate.out.filtered
+            .combine( sims )
+            .map { meta, uniq_fasta, totaluniqseq, fstats, sim ->
+                def m = meta + [ sim: sim, id: "${meta.id_cutoff}_s${sim}".toString() ]
+                tuple(m, uniq_fasta, totaluniqseq)
+            }
+
+        assemble_rainbow_candidate(
+            assemble_in,
+            params.div_f, params.div_K, params.merge_r, params.final_similarity
+        )
+
+        candidates = assemble_rainbow_candidate.out.reference   // tuple(meta, denovo_reference.fa)
 
         // ----- STAGE 1: cheap signals per candidate -> provisional rank -----
         stub_cheap_signals( candidates )
         cheap_rows = stub_cheap_signals.out.cheap_row.collect()
         stub_provisional_rank( cheap_rows )
         survivors_ch = stub_provisional_rank.out.survivors
+
 
         // ----- CONCORDANCE BRANCH: N highest-depth individuals, split 50/50 -----
         // STUB selection: take first N by sample order. Chunk 5 selects by depth.
@@ -213,8 +247,8 @@ workflow optimize_denovo {
             .filter{ it }
 
         survivor_candidates = candidates
-            .map{ meta, fa -> tuple(meta.id, meta, fa) }
-            .join( survivor_ids.map{ id -> tuple(id, true) } )
+            .map{ meta, fa -> tuple(meta.id.toString(), meta, fa) }
+            .join( survivor_ids.map{ id -> tuple(id.toString(), true) } )
             .map{ id, meta, fa, flag -> tuple(meta, fa) }
 
         stage2_in = survivor_candidates
