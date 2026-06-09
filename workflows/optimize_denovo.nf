@@ -186,8 +186,10 @@ workflow optimize_denovo {
 
         // Cutoff combos = c1 x c2 (filtering is similarity-INDEPENDENT, so filter
         // runs ONCE per (c1,c2) and is later crossed with similarities).
-        cutoff_combos = c1_vals
-            .combine( c2_vals )
+        // Wrap each list with .map{ [it] } so combine keeps it as ONE slot rather
+        // than spreading the list elements across tuple positions.
+        cutoff_combos = c1_vals.map{ [it] }
+            .combine( c2_vals.map{ [it] } )
             .flatMap { c1list, c2list ->
                 def out = []
                 for (c1 in c1list) for (c2 in c2list) {
