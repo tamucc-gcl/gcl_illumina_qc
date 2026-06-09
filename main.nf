@@ -32,17 +32,46 @@ params.taxonomy_db = "/work/birdlab/databases/ncbi_taxonomy" // Path to local NC
 // Assembly parameters
 params.cutoff1 = null       // Min reads per individual (null = auto-detect from data)
 params.cutoff2 = null       // Min individuals (null = auto-detect from data)  
-params.cluster_similarity = 0.8 // used when do_sweep = false; ignored during a sweep
+params.cluster_similarity = null // used when do_sweep = false; ignored during a sweep
 params.div_f = 0.5
 params.div_K = 10
 params.merge_r = 2
 params.final_similarity = 0.9
 
-params.do_sweep = true                                     // sweep cutoffs + cluster_similarity, pick best by map-back
-params.sweep_cluster_similarity = [0.80, 0.85, 0.90, 0.95]  // cluster_similarity grid
-params.cutoff_sweep_floor = 2                               // low end of cutoff1/cutoff2 grids (knee = high end)
-params.sweep_sample_pct = 25                                // % of samples mapped back to score each candidate (100 = all)
-params.sweep_seed = 42                                      // seed for the random sample subset
+// --- De novo cutoff/similarity optimization ---
+params.do_optimize = false
+
+// Grid to search. Knee values from diagnostics act as CEILINGS for c1/c2 unless
+// pinned. Explicit --cutoff1/--cutoff2/--cluster_similarity PIN that dimension.
+params.optimize_cluster_similarity = [0.80, 0.85, 0.90, 0.95]
+params.cutoff_floor                = 2        // lowest c1/c2 to consider in the grid
+
+// Subset used to BUILD candidate references (assembly branch, intact individuals).
+params.optimize_sample_pct = 25               // 100 = all samples
+params.optimize_seed       = 42               // deterministic subset + pseudo-rep split
+
+// Pseudo-replicates for the concordance signal (stage 2). The N highest-depth
+// individuals are auto-selected and split 50/50; halves are used ONLY for
+// concordance and never published (the intact individual goes to production).
+params.n_pseudo_reps = 6
+
+// Two-stage handoff: cheap signals rank all candidates; the top-N by provisional
+// rank get the expensive bcftools step. N is auto-set by the largest gap in the
+// provisional-rank-score curve, clamped to [min,max] as a compute safety valve.
+params.stage2_min_candidates = 3
+params.stage2_max_candidates = 10
+
+// --- Optional biological locus-count anchor (signal 2) ---
+// If ALL THREE are supplied, expected RAD locus count is estimated and proximity
+// to it becomes one of the ranking signals. If ANY is null, signal 2 is skipped.
+params.enzyme_pair       = null   // e.g. "SbfI-MspI" (informational; cut-site model uses recognition lengths below if given)
+params.genome_size_est   = null   // estimated genome size in bp, e.g. 1.2e9
+params.size_select_min   = null   // size-selection lower bound in bp, e.g. 300
+params.size_select_max   = null   // size-selection upper bound in bp, e.g. 500
+// Optional: recognition-site lengths for the cut-site frequency model.
+// Defaults assume two 6-cutters if enzyme_pair given without explicit lengths.
+params.enzyme1_site_len  = 6
+params.enzyme2_site_len  = 4
 
 //--------------------------------------------------------------------
 // DERIVED PARAMETERS
