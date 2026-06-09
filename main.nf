@@ -32,7 +32,7 @@ params.taxonomy_db = "/work/birdlab/databases/ncbi_taxonomy" // Path to local NC
 // Assembly parameters
 params.cutoff1 = null       // Min reads per individual (null = auto-detect from data)
 params.cutoff2 = null       // Min individuals (null = auto-detect from data)  
-params.cluster_similarity = null // used when do_sweep = false; ignored during a sweep
+params.cluster_similarity = null // used when do_optimize = false; ignored during optimization
 params.div_f = 0.5
 params.div_K = 10
 params.merge_r = 2
@@ -340,8 +340,8 @@ workflow {
         filter_stats_ch = denovo_assembly.out.filter_stats
         cutoff1_plot_ch = denovo_assembly.out.cutoff1_plot
         cutoff2_plot_ch = denovo_assembly.out.cutoff2_plot
-        sweep_plot_ch = denovo_assembly.out.sweep_plot
-        sweep_summary_ch = denovo_assembly.out.sweep_summary
+        sweep_plot_ch = denovo_assembly.out.optimize_plot
+        sweep_summary_ch = denovo_assembly.out.optimize_summary
         
         // Use the de novo assembly as reference genome
         log.info "Indexing de novo assembly"
@@ -539,7 +539,7 @@ workflow {
         final_assembly_stats = assembly_stats_ch
         final_cutoff1_plot = cutoff1_plot_ch
         final_cutoff2_plot = cutoff2_plot_ch
-        if (params.do_sweep) {
+        if (params.do_optimize) {
             final_filter_stats  = placeholder_outputs[1]
             final_sweep_plot    = sweep_plot_ch
             final_sweep_summary = sweep_summary_ch
