@@ -135,13 +135,13 @@ if genome_source.startswith("denovo:"):
         assembly_info.append("")
         assembly_info.append("Cutoffs were selected by knee detection on the unique-sequence retention curves below. Override with `--cutoff1` / `--cutoff2` if needed.")
         assembly_info.append("")
-        assembly_info.append(f"![Cutoff 1 selection](${params.outdir}/denovo_assembly/diagnostics/cutoff1_curve.png)")
+        assembly_info.append(f"![Cutoff 1 selection](denovo_assembly/diagnostics/cutoff1_curve.png)")
         assembly_info.append("")
-        assembly_info.append(f"![Cutoff 2 selection](${params.outdir}/denovo_assembly/diagnostics/cutoff2_curve.png)")
+        assembly_info.append(f"![Cutoff 2 selection](denovo_assembly/diagnostics/cutoff2_curve.png)")
         assembly_info.append("")
 
     if sweep_performed:
-        assembly_info.append("### Cluster-Similarity Sweep")
+        assembly_info.append("### Assembly Parameter Sweep")
         assembly_info.append("")
         try:
             import csv as _csv
@@ -151,12 +151,13 @@ if genome_source.startswith("denovo:"):
             sweep_rows = []
             print(f"Could not read sweep summary: {e}")
 
-        selected_sim = sweep_rows[0]['sim'] if sweep_rows else "unknown"
+        best = sweep_rows[0] if sweep_rows else {}
+        sel = f"cutoff1={best.get('c1','?')}, cutoff2={best.get('c2','?')}, cluster_similarity={best.get('sim','?')}" if best else "unknown"
         assembly_info.append(
-            f"A candidate reference was assembled at each `cluster_similarity` value, then a subset of samples was mapped back to score them. Selected value: **{selected_sim}** (highest composite of mapping rate, properly-paired rate, low soft-clipping, and alignment score)."
+            f"A candidate reference was assembled for each combination of cutoff1, cutoff2, and cluster_similarity, then a subset of samples was mapped back to score them. Selected combination: **{sel}** (highest composite of mapping rate, properly-paired rate, low soft-clipping, and alignment score)."
         )
         assembly_info.append("")
-        assembly_info.append(f"![Cluster-similarity sweep comparison](${params.outdir}/denovo_assembly/sweep/sweep_comparison.png)")
+        assembly_info.append(f"![Assembly sweep comparison](denovo_assembly/sweep/sweep_comparison.png)")
         assembly_info.append("")
 
         if sweep_rows:
@@ -165,15 +166,20 @@ if genome_source.startswith("denovo:"):
                     return f"{float(row.get(key,'')):.{nd}f}"
                 except Exception:
                     return row.get(key, '')
-            assembly_info.append("| cluster_similarity | n samples | mapping % | properly paired % | soft-clip/read | mean AS | composite |")
-            assembly_info.append("|---|---|---|---|---|---|---|")
+            best_id = best.get('id', '')
+            assembly_info.append(f"<details><summary>Full sweep results ({len(sweep_rows)} candidates, ranked by composite)</summary>")
+            assembly_info.append("")
+            assembly_info.append("| cutoff1 | cutoff2 | cluster_similarity | n samples | mapping % | properly paired % | soft-clip/read | mean AS | composite |")
+            assembly_info.append("|---|---|---|---|---|---|---|---|---|")
             for r in sweep_rows:
-                mark = " (selected)" if r.get('sim') == selected_sim else ""
+                mark = " (selected)" if r.get('id') == best_id else ""
                 assembly_info.append(
-                    f"| {r.get('sim','')}{mark} | {r.get('n_samples','')} | {_fmt(r,'map_rate')} | {_fmt(r,'pp_rate')} | {_fmt(r,'softclip_per_read')} | {_fmt(r,'mean_AS')} | {_fmt(r,'composite',3)} |"
+                    f"| {r.get('c1','')}{mark} | {r.get('c2','')} | {r.get('sim','')} | {r.get('n_samples','')} | {_fmt(r,'map_rate')} | {_fmt(r,'pp_rate')} | {_fmt(r,'softclip_per_read')} | {_fmt(r,'mean_AS')} | {_fmt(r,'composite',3)} |"
                 )
             assembly_info.append("")
-        assembly_info.append(f"Full ranked table: [sweep_summary.tsv](${params.outdir}/denovo_assembly/sweep/sweep_summary.tsv)")
+            assembly_info.append("</details>")
+            assembly_info.append("")
+        assembly_info.append(f"Full ranked table: [sweep_summary.tsv](denovo_assembly/sweep/sweep_summary.tsv)")
         assembly_info.append("")
 
     if filter_performed:
@@ -403,7 +409,7 @@ multiqc_links = []
 for mqf in sorted_multiqc:
     for stage, name in stage_names.items():
         if stage in mqf:
-            multiqc_links.append(f"- [{name}](${params.outdir}/qc/multiqc_reports/{mqf})")
+            multiqc_links.append(f"- [{name}](qc/multiqc_reports/{mqf})")
             break
 
 # ----------------------------------------------------------------
@@ -442,13 +448,13 @@ if species_id_performed:
             species_id_section += (
                 "\\n### BLAST Hit Distributions\\n\\n"
                 "#### Raw BLAST Results by Taxonomic Level\\n"
-                f"![Raw BLAST Pie Charts](${params.outdir}/species_id/blast_raw_pie.png)\\n\\n"
+                f"![Raw BLAST Pie Charts](species_id/blast_raw_pie.png)\\n\\n"
                 "#### Summarized Species Identification\\n"
-                f"![Summary BLAST Pie Charts](${params.outdir}/species_id/blast_summary_pie.png)\\n\\n"
+                f"![Summary BLAST Pie Charts](species_id/blast_summary_pie.png)\\n\\n"
                 "### Detailed Results\\n\\n"
-                f"- [Combined BLAST results (TSV)](${params.outdir}/species_id/blast_results.tsv)\\n"
-                f"- [Top BLAST hits per sample (CSV)](${params.outdir}/species_id/top_blast_hits.csv)\\n"
-                f"- [Posterior probabilities by taxonomic level](${params.outdir}/species_id/blast_posteriors/)\\n"
+                f"- [Combined BLAST results (TSV)](species_id/blast_results.tsv)\\n"
+                f"- [Top BLAST hits per sample (CSV)](species_id/top_blast_hits.csv)\\n"
+                f"- [Posterior probabilities by taxonomic level](species_id/blast_posteriors/)\\n"
             )
     except Exception as e:
         print(f"Could not process species ID results: {e}")
@@ -486,19 +492,19 @@ if mapping_performed and final_stats["n"] > 0:
 
     insert_size_line = ""
     if insert_size_violin_performed:
-        insert_size_line = f"\\n![Insert Size Distribution](${params.outdir}/qc/insert_size_violin.png)\\n"
+        insert_size_line = f"\\n![Insert Size Distribution](qc/insert_size_violin.png)\\n"
 
     soft_clip_line = ""
     if soft_clip_performed:
-        soft_clip_line = f"\\n![Soft Clipping Distribution](${params.outdir}/qc/soft_clipping_violin.png)\\n"
+        soft_clip_line = f"\\n![Soft Clipping Distribution](qc/soft_clipping_violin.png)\\n"
 
     aln_score_line = ""
     if aln_score_performed:
-        aln_score_line = f"\\n![Alignment Score Distribution](${params.outdir}/qc/alignment_score_violin.png)\\n"
+        aln_score_line = f"\\n![Alignment Score Distribution](qc/alignment_score_violin.png)\\n"
 
     mapping_section = (
         "## Mapped Reads\\n\\n"
-        f"![Mapped Read Distribution](${params.outdir}/qc/mapped_reads_histogram.png)\\n"
+        f"![Mapped Read Distribution](qc/mapped_reads_histogram.png)\\n"
         f"{insert_size_line}"
         f"{soft_clip_line}"
         f"{aln_score_line}"
@@ -514,7 +520,7 @@ if mapping_performed and final_stats["n"] > 0:
         f"- Total bases mapped: {format_bases(total_bases_mapped)} (assuming {read_length_estimate}bp reads)\\n"
         f"{mapped_retention_pct}\\n\\n"
         "### Final Mapping Statistics\\n"
-        f"See [${mapping_summary}](${params.outdir}/qc/${mapping_summary}) for detailed mapping statistics per sample."
+        f"See [${mapping_summary}](qc/${mapping_summary}) for detailed mapping statistics per sample."
     )
 
 # ----------------------------------------------------------------
@@ -528,7 +534,7 @@ markdown_content = f\'\'\'# GCL Illumina QC Pipeline Report
 
 ## Initial Sequencing
 
-![Initial Read Distribution](${params.outdir}/qc/initial_reads_histogram.png)
+![Initial Read Distribution](qc/initial_reads_histogram.png)
 
 **Summary Statistics (n={initial_stats["n"]} samples):**
 - Mean reads per sample: {fmt_num(initial_stats["mean"])}
@@ -544,13 +550,13 @@ markdown_content = f\'\'\'# GCL Illumina QC Pipeline Report
 ## Sequencing QC
 
 ### Read Retention Through QC Pipeline
-![QC Summary Plot](${params.outdir}/qc/qc_summary_plot.png)
+![QC Summary Plot](qc/qc_summary_plot.png)
 
 ### MultiQC Reports (download locally to view)
 {chr(10).join(multiqc_links) if multiqc_links else "No MultiQC reports found"}
 
 ### Stage-by-Stage Comparison
-See [stage_comparison.txt](${params.outdir}/qc/stage_comparison.txt) for detailed retention rates between stages.
+See [stage_comparison.txt](qc/stage_comparison.txt) for detailed retention rates between stages.
 
 {cleaned_section}
 

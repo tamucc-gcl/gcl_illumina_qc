@@ -81,8 +81,42 @@ Assembly Parameters:
 
 Input sequences: \$(grep -c '^>' ${uniq_fasta})
 Final reference contigs: \$(grep -c '^>' denovo_reference.fa)
+
+Final Assembly Metrics:
 EOF
+
+    # Calculate contig length distribution
+    awk '/^>/ {if (seq) print length(seq); seq=""; next} {seq=seq\$0} END {if (seq) print length(seq)}' \
+        denovo_reference.fa | sort -rn > contig_lengths.txt
+
+    # N50 and other metrics
+    total_length=\$(awk '{sum+=\$1} END {print sum}' contig_lengths.txt)
+    num_contigs=\$(wc -l < contig_lengths.txt)
+    half_length=\$(echo "\$total_length / 2" | bc)
+    n50=\$(awk -v half=\$half_length '{sum+=\$1; if(sum>=half && !found) {print \$1; found=1}}' contig_lengths.txt)
+
+    echo "  Total bases: \$total_length" >> assembly_stats.txt
+    echo "  Total contigs: \$num_contigs" >> assembly_stats.txt
+    echo "  N50: \$n50" >> assembly_stats.txt
+    echo "  Min contig: \$(tail -1 contig_lengths.txt) bp" >> assembly_stats.txt
+    echo "  Max contig: \$(head -1 contig_lengths.txt) bp" >> assembly_stats.txt
+    echo "  Mean contig: \$(awk -v n=\$num_contigs -v t=\$total_length 'BEGIN{printf "%.0f", t/n}') bp" >> assembly_stats.txt
+
+    # Paired vs forward-only loci (PE spacer NNNNNNNNNN marks paired assembly)
+    paired_loci=\$(grep -v '^>' denovo_reference.fa | grep -c 'NNNNNNNNNN' || true)
+    echo "  Paired-end loci (with N-spacer): \$paired_loci" >> assembly_stats.txt
+    echo "  Forward-only loci: \$(awk -v c=\$num_contigs -v p=\$paired_loci 'BEGIN{print c-p}')" >> assembly_stats.txt
+
+    # Contig size distribution
+    echo "" >> assembly_stats.txt
+    echo "Contig Size Distribution:" >> assembly_stats.txt
+    echo "  >10kb: \$(awk '\$1>10000' contig_lengths.txt | wc -l)" >> assembly_stats.txt
+    echo "  5-10kb: \$(awk '\$1>=5000 && \$1<=10000' contig_lengths.txt | wc -l)" >> assembly_stats.txt
+    echo "  1-5kb: \$(awk '\$1>=1000 && \$1<5000' contig_lengths.txt | wc -l)" >> assembly_stats.txt
+    echo "  500bp-1kb: \$(awk '\$1>=500 && \$1<1000' contig_lengths.txt | wc -l)" >> assembly_stats.txt
+    echo "  <500bp: \$(awk '\$1<500' contig_lengths.txt | wc -l)" >> assembly_stats.txt
+
     cat assembly_stats.txt
-    rm -f xxx xxx.clstr
+    rm -f contig_lengths.txt xxx xxx.clstr
     """
 }
