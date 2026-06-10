@@ -31,6 +31,27 @@ weight-free rank-aggregation selector over multiple non-circular signals.
   corner is already pruned (cutoff2_floor=3, no s0.80), so the surviving grid is
   the fast region.
 
+## map_reads cardinality bug — only 1 sample mapped (FIXED)
+Symptom: downstream map_reads/samtools_stats ran 1 of 1 (not 45). This is the
+old "n=1 samples" report bug, now root-caused.
+Cause: map_reads(repair.out, genome_indexed) has TWO queue-channel inputs. The
+genome (genome_indexed = prepare_genome_local.out.genome) emits ONCE. A process
+with two queue inputs consumes them in lockstep and STOPS when the shorter
+(1-emission genome) is exhausted -> only the first read sample maps.
+FIX: genome must be a VALUE channel so it broadcasts to all 45 read emissions:
+  map_reads( repair.out, genome_indexed.first() )
+Applied to BOTH map_reads calls (denovo branch line ~353 AND reference-genome
+branch line ~295 — same latent bug in both).
+NOTE: this also fixes the separate "Mapped Reads n=1 / 1.3% retention" report
+issue we shelved earlier — same root cause.
+
+## Full-sample candidate contig counts (Position B, real data 10-Jun)
+Grid behaves sensibly. cutoff1 (c) dominates; cutoff2 (k3 vs k4) barely matters
+at 45 individuals; similarity nudges up monotonically:
+  c2 ~88-93k, c3 ~71-75k, c4 ~59-62k, c5 ~48-51k contigs.
+Still ~2x size spread across grid -> size-bias concern remains live -> validates
+using non-circular signals (NB-mixture/redundancy/anchor/concordance), NOT map rate.
+
 ## CHUNK 3a/Position B — finalize filename-collision fix
 Position B made every candidate's reference literally `denovo_reference.fa`.
 The old finalize collected ALL candidate fastas into one process -> Nextflow

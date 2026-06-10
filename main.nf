@@ -45,7 +45,7 @@ params.do_optimize = false
 // pinned. Explicit --cutoff1/--cutoff2/--cluster_similarity PIN that dimension.
 params.optimize_cluster_similarity = [0.85, 0.90, 0.95]
 params.cutoff1_floor               = 2        // lowest cutoff1 (per-individual coverage) in the grid
-params.cutoff2_floor               = 3        // lowest cutoff2 (n individuals) in the grid; 2 = junk/bloat + slow CD-HIT, skipped by default
+params.cutoff2_floor               = 3        // lowest cutoff2 (n individuals); 2 = junk/bloat + slow CD-HIT, skipped by default
 
 // Subset used to BUILD candidate references (assembly branch, intact individuals).
 params.snp_sample_pct = 25               // fraction of samples used for STAGE-2 SNP-recovery scoring (NOT assembly; assembly uses all samples)
@@ -292,7 +292,7 @@ workflow {
         }
         
         // Map reads to reference
-        map_reads( repair.out, genome_indexed )
+        map_reads( repair.out, genome_indexed.first() )
         
         // Generate BAM statistics
         samtools_stats( map_reads.out )
@@ -350,7 +350,7 @@ workflow {
         genome_indexed = prepare_genome_local.out.genome
         
         // Map reads to de novo assembly
-        map_reads( repair.out, genome_indexed )
+        map_reads( repair.out, genome_indexed.first() )
         
         // Generate BAM statistics
         samtools_stats( map_reads.out )
