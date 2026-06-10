@@ -234,6 +234,18 @@ Cheap signals/stage-2/finalize STILL STUBBED, so:
 Known 3a id detail: Groovy renders 0.80->"0.8", 0.90->"0.9" in ids. Internally
 consistent (join matches), just cosmetic. Will tidy display in report (chunk 7).
 
+## CHUNK 3b — outputs now published (added after first 3b run)
+First 3b run succeeded but outputs were invisible (no publishDir — they sat in
+work/ only). Added publishDir to ${outdir}/denovo_assembly/optimize/:
+  - provisional_rank.nf  -> provisional_rank.tsv
+  - fit_nb_mixture.nf    -> nb_mixture_fit.txt
+(compute_cheap_signals per-candidate rows stay unpublished — intermediate.)
+To inspect the FIRST run without rerunning, pull from work dirs:
+  cat $(find work/05/9696eb* -name provisional_rank.tsv)
+  cat $(find work/b1/ec738f* -name nb_mixture_fit.txt)
+Reinstall provisional_rank.nf + fit_nb_mixture.nf and -resume to publish them
+(these two processes will re-run since their definition changed; cheap.
+
 ## CHUNK 3b — install + test
 Install:
   modules/compute_cheap_signals.nf   (new)

@@ -17,6 +17,8 @@ process fit_nb_mixture {
     label 'optimize_rank'    // light R env (r-base + tidyverse); add if not present
     tag "nb_mixture_cutoff1"
 
+    publishDir "${params.outdir}/denovo_assembly/optimize", mode: params.publish_dir_mode, pattern: "nb_mixture_fit.txt"
+
     input:
         path(coverage_freq)      // coverage_freq.txt: "<count> <coverage>" per line
         path(knee_fallback)      // cutoff1.value from assembly_diagnostics (fallback)

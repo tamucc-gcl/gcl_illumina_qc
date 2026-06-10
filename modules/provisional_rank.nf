@@ -11,6 +11,8 @@ process provisional_rank {
     label 'optimize_rank'
     tag "provisional_rank"
 
+    publishDir "${params.outdir}/denovo_assembly/optimize", mode: params.publish_dir_mode, pattern: "provisional_rank.tsv"
+
     input:
         path(cheap_rows)            // many cheap_<id>.tsv
         path(nb_cutoff1)            // nb_cutoff1.value
