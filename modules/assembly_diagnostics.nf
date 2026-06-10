@@ -25,6 +25,7 @@ process assembly_diagnostics {
         path("cutoff1_curve.png"),       emit: cutoff1_plot
         path("cutoff2_curve.png"),       emit: cutoff2_plot
         path("diagnostics_summary.txt"), emit: summary
+        path("coverage_freq.txt"),       emit: coverage_freq
 
     script:
     """

@@ -26,6 +26,9 @@ include { assembly_diagnostics } from '../modules/assembly_diagnostics.nf'
 include { split_pseudo_rep }     from '../modules/split_pseudo_rep.nf'
 include { filter_unique_seqs_candidate } from '../modules/filter_unique_seqs_candidate.nf'
 include { assemble_rainbow_candidate }   from '../modules/assemble_rainbow_candidate.nf'
+include { compute_cheap_signals }       from '../modules/compute_cheap_signals.nf'
+include { fit_nb_mixture }               from '../modules/fit_nb_mixture.nf'
+include { provisional_rank }             from '../modules/provisional_rank.nf'
 
 // ---------------------------------------------------------------------------
 // STUB PROCESSES — echo placeholders. Replaced in later chunks.
@@ -36,41 +39,8 @@ include { assemble_rainbow_candidate }   from '../modules/assemble_rainbow_candi
 // (chunk 3a) stub_build_candidate REMOVED — real candidates now come from
 // filter_unique_seqs_candidate + assemble_rainbow_candidate.
 
-// Stand-in for: cheap signals (1a inflection, 1b redundancy, 5b NB-mixture, 2 anchor)
-// per candidate -> one provisional-score row. Real version = chunks 3.
-process stub_cheap_signals {
-    label 'basic'
-    tag "${meta.id}"
-    input:
-        tuple val(meta), path(candidate)
-    output:
-        path("cheap_${meta.id}.tsv"), emit: cheap_row
-    script:
-    """
-    echo "[STUB] cheap signals for ${meta.id}"
-    # id c1 c2 sim n_contigs redundancy inflection nbfit anchor_dev
-    printf "%s\\t%s\\t%s\\t%s\\t0\\t0\\t0\\t0\\tNA\\n" "${meta.id}" "${meta.c1}" "${meta.c2}" "${meta.sim}" > cheap_${meta.id}.tsv
-    """
-}
-
-// Stand-in for: provisional rank + gap-based top-N selection. Real version = chunk 4.
-process stub_provisional_rank {
-    label 'basic'
-    tag "provisional_rank"
-    input:
-        path(cheap_rows)
-    output:
-        path("survivors.txt"),        emit: survivors   // one meta.id per line
-        path("provisional_rank.tsv"), emit: provisional
-    script:
-    """
-    echo "[STUB] provisional rank over \$(ls cheap_*.tsv 2>/dev/null | wc -l) candidates"
-    cat cheap_*.tsv > provisional_rank.tsv
-    # STUB: 'select' the first up-to-3 candidate ids as survivors
-    cut -f1 provisional_rank.tsv | head -n 3 > survivors.txt
-    echo "[STUB] survivors:"; cat survivors.txt
-    """
-}
+// (chunk 3b) stub_cheap_signals and stub_provisional_rank REMOVED — real signals
+// now come from compute_cheap_signals.nf + fit_nb_mixture.nf + provisional_rank.nf.
 
 // Stand-in for: stage-2 bcftools SNP recovery + pseudo-rep concordance per survivor.
 // Real version = chunk 5. Takes a survivor candidate + the pseudo-rep reads.
@@ -220,11 +190,53 @@ workflow optimize_denovo {
 
         candidates = assemble_rainbow_candidate.out.reference   // tuple(meta, denovo_reference.fa)
 
-        // ----- STAGE 1: cheap signals per candidate -> provisional rank -----
-        stub_cheap_signals( candidates )
-        cheap_rows = stub_cheap_signals.out.cheap_row.collect()
-        stub_provisional_rank( cheap_rows )
-        survivors_ch = stub_provisional_rank.out.survivors
+        // ----- STAGE 1: CHEAP signals per candidate -> provisional rank -----
+        // 1a inflection inputs + 1b redundancy + 2 anchor input, per candidate.
+        // redundancy self-cluster identity: tighter than any grid sim so it surfaces
+        // residual near-duplicate contigs (default 0.98).
+        def redun_identity = (params.optimize_redundancy_identity ?: 0.98) as double
+        compute_cheap_signals( candidates, redun_identity )
+        cheap_rows = compute_cheap_signals.out.cheap_row.collect()
+
+        // 5b: global NB-mixture cutoff1 from the pooled coverage distribution
+        // (assembly_diagnostics now emits coverage_freq.txt; knee value is fallback).
+        fit_nb_mixture(
+            assembly_diagnostics.out.coverage_freq,
+            assembly_diagnostics.out.cutoff1_value
+        )
+
+        // 2 anchor: expected RAD locus count from enzyme/genome/size-selection params.
+        // Cut-site model: each enzyme cuts ~once per 4^site_len bp; double-digest
+        // fragments bounded by the two cut frequencies; fraction in the size window
+        // approximated by window_width / mean_fragment_length. If any input missing,
+        // expected = "NA" and signal 2 is dropped in the rank script.
+        def expected_loci = "NA"
+        if (params.genome_size_est && params.size_select_min && params.size_select_max) {
+            def G   = params.genome_size_est as double
+            def s1  = (params.enzyme1_site_len ?: 6) as int
+            def s2  = (params.enzyme2_site_len ?: 4) as int
+            // expected cut sites for each enzyme across the genome (both strands ~ /2 cancels in ratio)
+            def cuts1 = G / Math.pow(4, s1)
+            def cuts2 = G / Math.pow(4, s2)
+            // double-digest fragments flanked by one of each enzyme: density ~ 2*cuts1*cuts2/G
+            // (Poisson-spacing approximation for AB/BA fragments along the genome)
+            def dd_fragments = 2.0 * cuts1 * cuts2 / G
+            def mean_frag = G / dd_fragments
+            def win = (params.size_select_max as double) - (params.size_select_min as double)
+            // fraction of an exponential fragment-length distribution within the window,
+            // centered near the window: approximate retained fraction = win / mean_frag, capped at 1
+            def frac = Math.min(1.0, win / mean_frag)
+            def exp_loci = Math.round(dd_fragments * frac)
+            expected_loci = exp_loci.toString()
+            log.info "Biological anchor: expected ~${expected_loci} RAD loci (enzymes ${s1}/${s2}-cutter, genome ${G} bp, window ${params.size_select_min}-${params.size_select_max} bp)"
+        } else {
+            log.info "Biological anchor (signal 2) disabled — supply genome_size_est + size_select_min/max to enable"
+        }
+
+        def min_surv = (params.stage2_min_candidates ?: 3) as int
+        provisional_rank( cheap_rows, fit_nb_mixture.out.nb_cutoff1, expected_loci, min_surv )
+        survivors_ch = provisional_rank.out.survivors
+
 
 
         // ----- CONCORDANCE BRANCH: N highest-depth individuals, split 50/50 -----
@@ -263,7 +275,7 @@ workflow optimize_denovo {
         stage2_rows = stub_stage2.out.stage2_row.collect()
 
         // ----- AGGREGATE: weight-free rank aggregation -> winner -----
-        stub_aggregate( stub_provisional_rank.out.provisional, stage2_rows )
+        stub_aggregate( provisional_rank.out.provisional, stage2_rows )
 
         // ----- FINALIZE: SELECT the winning candidate as the production reference -----
         // Position B: candidates are already full-sample assemblies, so finalize just

@@ -99,8 +99,24 @@ errored on the collision. So Position B assembly + scoring topology all work.
               crossed with sims -> real candidate assemblies. Cheap signals STILL
               STUBBED. New modules: filter_unique_seqs_candidate.nf,
               assemble_rainbow_candidate.nf (full N50/stats block + PE-spacer count).
-        - [ ] CHUNK 3b: real cheap signals (1a inflection, 1b redundancy, 2 anchor,
-              5b NB-mixture) + provisional-rank R script.
+        - [x] CHUNK 3b: real cheap signals + provisional rank (weight-free aggregation)
+              NEW modules: compute_cheap_signals.nf (per-candidate: contig stats=1a
+                inputs, self-cluster redundancy=1b, n_contigs for anchor=2),
+                fit_nb_mixture.nf (global NB-mixture cutoff1=5b),
+                provisional_rank.nf (runs rank R script).
+              NEW r_scripts: fit_nb_mixture.R (2-comp NB EM on coverage_freq ->
+                posterior-crossover cutoff1; falls back to knee), provisional_rank.R
+                (per-signal RANKS -> mean aggregate, weight-free; anchor dropped if
+                no enzyme params; NB enters as |c1 - nb_cutoff1| proximity rank).
+              EDITED: assembly_diagnostics.nf now emits coverage_freq.txt (for NB).
+              optimize_denovo.nf: stubs removed, real stage-1 wired, expected-loci
+                anchor computed from enzyme/genome/size-select params (cut-site model).
+              main.nf: + params.optimize_redundancy_identity = 0.98
+              Validated (python port, no R here): NB EM recovers 2 components +
+                sensible crossover; rank aggregation on REAL contig counts picks an
+                interior candidate (not size-extreme). 5b participates as ranking
+                signal (option a). NB still STUBBED downstream: stage2/aggregate/
+                finalize unchanged (chunks 4-6).
 - [ ] CHUNK 4  Gap handoff (top-N selection by provisional-rank gap)
 - [ ] CHUNK 5  Stage-2 bcftools (SNP recovery + concordance) + depth-based pseudo-rep selection
 - [ ] CHUNK 6  Aggregation R script (weight-free rank aggregation) + full-depth finalize assembly
@@ -217,6 +233,35 @@ Cheap signals/stage-2/finalize STILL STUBBED, so:
 
 Known 3a id detail: Groovy renders 0.80->"0.8", 0.90->"0.9" in ids. Internally
 consistent (join matches), just cosmetic. Will tidy display in report (chunk 7).
+
+## CHUNK 3b — install + test
+Install:
+  modules/compute_cheap_signals.nf   (new)
+  modules/fit_nb_mixture.nf          (new)
+  modules/provisional_rank.nf        (new)
+  r_scripts/fit_nb_mixture.R         (new)
+  r_scripts/provisional_rank.R       (new)
+  modules/assembly_diagnostics.nf    (overwrite — emits coverage_freq.txt)
+  workflows/optimize_denovo.nf       (overwrite — real stage-1)
+  main.nf                            (overwrite — + optimize_redundancy_identity)
+
+Config: ensure withLabel:optimize_rank exists (r-base + tidyverse) — used by
+fit_nb_mixture and provisional_rank. compute_cheap_signals reuses denovo_assembly
+label (needs cd-hit-est).
+
+Run: same command. Cached up through assemble_rainbow_candidate (24). NEW work:
+  - compute_cheap_signals: 24 tasks (self-cluster each candidate at 0.98)
+  - fit_nb_mixture: 1 (global NB on coverage_freq)
+  - provisional_rank: 1 (rank R script) -> survivors.txt
+Then stage2/aggregate/finalize STILL STUBBED -> downstream mapping on stub winner.
+Check: provisional_rank.tsv has per-signal ranks + agg_rank; survivors plausible
+(interior candidates, not pure size-extremes). nb_mixture_fit.txt shows 2-comp fit.
+
+To test the anchor (signal 2), add e.g.:
+  --genome_size_est 1.2e9 --size_select_min 300 --size_select_max 500
+  (and optionally --enzyme1_site_len 6 --enzyme2_site_len 4)
+
+## Topology test — what to expect (STUB run)
 
 ## Topology test — what to expect (STUB run)
 Command (after install; upstream cached so this is cheap):
