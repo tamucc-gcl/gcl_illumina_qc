@@ -19,7 +19,7 @@ workflow denovo_assembly {
 
     main:
         if (params.do_optimize) {
-            log.info "De novo OPTIMIZATION enabled: grid floor ${params.cutoff_floor}..knee x cluster_similarity ${params.optimize_cluster_similarity}; assembly subset ${params.optimize_sample_pct}%, ${params.n_pseudo_reps} pseudo-replicates"
+            log.info "De novo OPTIMIZATION enabled: grid c1 ${params.cutoff1_floor}..knee x c2 ${params.cutoff2_floor}..knee x cluster_similarity ${params.optimize_cluster_similarity}; assembly subset ${params.optimize_sample_pct}%, ${params.n_pseudo_reps} pseudo-replicates"
 
             optimize_denovo( cleaned_reads )
 

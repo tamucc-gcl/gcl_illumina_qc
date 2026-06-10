@@ -43,8 +43,9 @@ params.do_optimize = false
 
 // Grid to search. Knee values from diagnostics act as CEILINGS for c1/c2 unless
 // pinned. Explicit --cutoff1/--cutoff2/--cluster_similarity PIN that dimension.
-params.optimize_cluster_similarity = [0.80, 0.85, 0.90, 0.95]
-params.cutoff_floor                = 2        // lowest c1/c2 to consider in the grid
+params.optimize_cluster_similarity = [0.85, 0.90, 0.95]
+params.cutoff1_floor               = 2        // lowest cutoff1 (per-individual coverage) in the grid
+params.cutoff2_floor               = 3        // lowest cutoff2 (n individuals) in the grid; 2 = junk/bloat + slow CD-HIT, skipped by default
 
 // Subset used to BUILD candidate references (assembly branch, intact individuals).
 params.optimize_sample_pct = 25               // 100 = all samples

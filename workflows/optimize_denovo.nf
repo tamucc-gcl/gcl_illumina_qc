@@ -156,9 +156,15 @@ workflow optimize_denovo {
             : cleaned_reads
                 .toList()
                 .flatMap { rows ->
-                    def shuffled = new ArrayList(rows)
+                    // CRITICAL: sort by sample_id FIRST. cleaned_reads emission order
+                    // is NOT stable across runs (depends on task completion timing),
+                    // so shuffling the raw list — even with a fixed seed — gives a
+                    // different subset each run, busting the filter/assembly cache.
+                    // Sorting to a canonical order makes seed+input reproducible.
+                    def sorted = new ArrayList(rows).sort { a, b -> a[0] <=> b[0] }
+                    def shuffled = new ArrayList(sorted)
                     Collections.shuffle(shuffled, new Random(seed))
-                    int n = Math.max(1, (int) Math.ceil(rows.size() * pct / 100.0))
+                    int n = Math.max(1, (int) Math.ceil(sorted.size() * pct / 100.0))
                     shuffled.take(n)
                 }
 
@@ -173,16 +179,20 @@ workflow optimize_denovo {
         // ----- Build the (c1,c2,sim) grid from floor..knee (or pinned params) -----
         // Knee values are read from diagnostics .value files and act as CEILINGS.
         // Explicit --cutoff1/--cutoff2 PIN that dimension to a single value.
-        def floor = (params.cutoff_floor ?: 2) as int
+        // Independent floors: cutoff1_floor (per-individual coverage) and
+        // cutoff2_floor (n individuals). cutoff2_floor defaults to 3 — the k2 corner
+        // is biologically junky AND the slowest to assemble (CD-HIT cost).
+        def c1_floor = (params.cutoff1_floor ?: 2) as int
+        def c2_floor = (params.cutoff2_floor ?: 3) as int
 
         c1_vals = (params.cutoff1 != null)
             ? Channel.value( [ params.cutoff1 as int ] )
             : assembly_diagnostics.out.cutoff1_value
-                .map { f -> def k = f.text.trim() as int; (floor..Math.max(floor, k)).toList() }
+                .map { f -> def k = f.text.trim() as int; (c1_floor..Math.max(c1_floor, k)).toList() }
         c2_vals = (params.cutoff2 != null)
             ? Channel.value( [ params.cutoff2 as int ] )
             : assembly_diagnostics.out.cutoff2_value
-                .map { f -> def k = f.text.trim() as int; (floor..Math.max(floor, k)).toList() }
+                .map { f -> def k = f.text.trim() as int; (c2_floor..Math.max(c2_floor, k)).toList() }
 
         // Cutoff combos = c1 x c2 (filtering is similarity-INDEPENDENT, so filter
         // runs ONCE per (c1,c2) and is later crossed with similarities).
@@ -230,9 +240,13 @@ workflow optimize_denovo {
 
 
         // ----- CONCORDANCE BRANCH: N highest-depth individuals, split 50/50 -----
-        // STUB selection: take first N by sample order. Chunk 5 selects by depth.
+        // STUB selection: deterministic first-N by SORTED sample id (chunk 5 will
+        // replace with depth-based selection). Sort before take so the set is
+        // stable across runs (same cache-determinism issue as the assembly subset).
         n_reps = params.n_pseudo_reps ?: 6
-        concordance_indivs = cleaned_reads.take( n_reps )
+        concordance_indivs = cleaned_reads
+            .toList()
+            .flatMap { rows -> new ArrayList(rows).sort { a, b -> a[0] <=> b[0] }.take( n_reps as int ) }
         split_pseudo_rep( concordance_indivs, params.optimize_seed ?: 42 )
 
         // Flatten pseudo-rep halves into a collected bag of fastqs for stage-2.
