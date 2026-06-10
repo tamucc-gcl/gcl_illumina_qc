@@ -517,3 +517,82 @@ CRITICAL CHECK during/after the run:
   in [size_select_min,max] from genome_size_est. Refine once real inputs arrive.
 - STUB reference is tiny -> chunk 2 test will show broken mapping %; ignore until
   chunk 6 wires the real finalize assembly.
+
+---
+
+## CHUNK 5b — 1-PASS SNP-signal rework (BUILT, not yet installed/run)
+
+### Why (the coverage saga conclusion)
+Every coverage-uniformity statistic tried (idxstats CV/Gini, per-base frac_hi/Gini/CV)
+stayed correlated with assembly SIZE on real data — latest run: corr(n_contigs,
+frac_hi) = -0.80. Coverage uniformity reads pruning-aggressiveness, not an independent
+quality axis, so it can't select OR gate. DECISION: drop coverage entirely (no mapping
+for it) and go 1-PASS — run SNP recovery on ALL candidates. The 2-stage gate
+(provisional_rank -> survivors -> stage2) is removed; cheap signals are ranking inputs.
+
+### Final 1-pass signal set (per candidate, all 84)
+1. NB cutoff1 proximity   |c1 - nb_cutoff1|        (c1 axis)
+2. anchor proximity       |n_contigs - expected|   (size/biological target; ~652)
+3. concordance (PRIMARY)  depth-weighted genotype agreement between pseudo-rep halves
+4. r80_loci               STACKS r80: # contigs polymorphic & genotyped in >=80% of
+                          SNP-subset samples (locus-level; size-robust — junk loci fail
+                          the share test). threshold = params.r80_threshold (0.8).
+5. snps_per_locus         n_snps / n_contigs (density, secondary)
+   inflection             REPORT-ONLY (excluded from aggregate; duplicates NB)
+Aggregation: weight-free MEAN of available signal ranks; winner = min agg rank.
+
+### r80 = STACKS rule (confirmed via web: Paris et al 2017, catchenlab)
+LOCUS-level, not site-level: a polymorphic locus (contig with >=1 SNP) genotyped in
+>=80% of individuals. Chosen because loci shared across 80% are likely real; low-cov/
+junk/paralog loci fail the share test (the size-robustness we need).
+
+### Files (in /mnt/user-data/outputs)
+NEW  modules/compute_snp_signals.nf   (label stage2_call) — runs on ALL candidates;
+       index + PASS A (map each pseudo-rep half separately, bcftools mpileup -a FORMAT/DP
+       | call -mv, query GT+DP, awk depth-weighted concordance) + PASS B (map snp subset,
+       joint call, awk r80 locus count + snps_per_locus). Emits 9-col:
+       id c1 c2 sim concordance r80_loci snps_per_locus n_snps n_called_contigs.
+       publishDir optimize/snp_signals/.
+NEW  r_scripts/rank_and_select.R + modules/rank_and_select.nf (label optimize_rank) —
+       single weight-free aggregation. Reads cheap_all.tsv(7) + snp_all.tsv(9 ciidddddi).
+       Ranks nb/anchor (asc on |.|) + conc/r80/snpdens (desc). agg=rowMeans(available).
+       Emits final_rank.tsv + best_id.value + optimize_plot.png (top-15 faceted).
+       publishDir optimize/.
+EDIT workflows/optimize_denovo.nf — removed compute_coverage_cv + provisional_rank
+       includes/wiring + stub_stage2/stub_aggregate processes + survivors/splitText/gate.
+       New flow: cheap_signals -> fit_nb_mixture -> write_anchor_calc -> split_pseudo_rep
+       -> pseudo_fastqs bag + snp_subset_reads bag (snp_sample_pct, sorted-before-take,
+       min 2) -> snp_in = candidates.combine(pseudo).combine(snp) -> compute_snp_signals
+       -> rank_and_select -> finalize selects winner by best_id join.
+       emit optimize_summary=final_rank, optimize_plot=plot (denovo_assembly.nf consumes
+       these names — confirmed unchanged).
+EDIT main.nf — removed cv_sample_n/cv_pileup_mult; +r80_threshold=0.8; stage2_min/max
+       params removed (1-pass = no gate).
+DELETE/stop-using modules/compute_coverage_cv.nf, modules/provisional_rank.nf,
+       r_scripts/provisional_rank.R, modules/compute_coverage_cv (+ any 5a per-base
+       coverage module).
+
+### Validated before shipping
+- concordance join awk: hand-calc 60/74 = 0.8108 -> awk gives 0.8108 ✓
+- concordance formula (python): clean ref 0.978 vs collapsed 0.756 ✓ (separates)
+- r80 count awk: ctg1(0.8 PASS)+ctg3(1.0 PASS), ctg2(0.2 FAIL) -> 2 ✓
+- all files brace/paren/bracket balanced ✓
+- column contract: SNP emit 9 == R read 9 (ciidddddi) ✓
+- stage2_call conda has bwa-mem2+samtools+bcftools (cpus=8) ✓
+
+### To INSTALL then RUN
+Install the 5 files above; delete/stop-using the coverage+provisional modules.
+Run (full biological params):
+  nextflow run gcl_illumina_qc/main.nf -profile slurm -resume \
+    --reads "data/fq_raw/guttata*.{1,2}.fq.gz" --assembly_mode denovo \
+    --sequencing_type ddrad --decontam_conffile configs/decontam.conf \
+    --outdir "illumina_qc/guttata_denovo" --do_optimize --n_pseudo_reps 6 \
+    --genome_size_est 1.3e9 --size_select_min 150 --size_select_max 221 \
+    --enzyme1_site_len 8 --enzyme2_site_len 6
+Cached through assemble_rainbow (84). NEW heavy work: compute_snp_signals x84 (2 bcftools
+passes each — the accepted compute jump), rank_and_select x1.
+
+### Inspect after run
+- final_rank.tsv: do concordance/r80/snpdens DISCRIMINATE and are they size-orthogonal
+  (corr each vs n_contigs ~ 0, unlike the -0.80 coverage failures)? Does winner make
+  biological sense vs ~652 anchor? Are concordance & r80 redundant (may prune one)?

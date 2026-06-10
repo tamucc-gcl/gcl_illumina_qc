@@ -62,16 +62,14 @@ params.optimize_seed       = 42               // deterministic pseudo-rep split 
 // concordance and never published (the intact individual goes to production).
 params.n_pseudo_reps = 6
 
-// Cheap-signal: coverage-uniformity subset size (samples mapped to each candidate)
-params.cv_sample_n = 4
-// Paralog-pileup threshold: fraction of contigs with mean depth > mult * median
-params.cv_pileup_mult = 2
+// SNP-signal: r80 share threshold (fraction of SNP-subset samples a locus must be
+// genotyped in to count as an r80 polymorphic locus; STACKS r80 rule, default 0.8)
+params.r80_threshold = 0.8
 
 // Two-stage handoff: cheap signals rank all candidates; the top-N by provisional
 // rank get the expensive bcftools step. N is auto-set by the largest gap in the
 // provisional-rank-score curve, clamped to [min,max] as a compute safety valve.
-params.stage2_min_candidates = 3
-params.stage2_max_candidates = 10
+// params.stage2_min_candidates / stage2_max_candidates REMOVED in 1-pass design (no gate)
 
 // --- Optional biological locus-count anchor (signal 2) ---
 // If ALL THREE are supplied, expected RAD locus count is estimated and proximity

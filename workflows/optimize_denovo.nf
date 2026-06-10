@@ -27,9 +27,9 @@ include { split_pseudo_rep }     from '../modules/split_pseudo_rep.nf'
 include { filter_unique_seqs_candidate } from '../modules/filter_unique_seqs_candidate.nf'
 include { assemble_rainbow_candidate }   from '../modules/assemble_rainbow_candidate.nf'
 include { compute_cheap_signals }       from '../modules/compute_cheap_signals.nf'
-include { compute_coverage_cv }          from '../modules/compute_coverage_cv.nf'
+include { compute_snp_signals }          from '../modules/compute_snp_signals.nf'
 include { fit_nb_mixture }               from '../modules/fit_nb_mixture.nf'
-include { provisional_rank }             from '../modules/provisional_rank.nf'
+include { rank_and_select }              from '../modules/rank_and_select.nf'
 include { write_anchor_calc }            from '../modules/write_anchor_calc.nf'
 
 // ---------------------------------------------------------------------------
@@ -42,47 +42,9 @@ include { write_anchor_calc }            from '../modules/write_anchor_calc.nf'
 // filter_unique_seqs_candidate + assemble_rainbow_candidate.
 
 // (chunk 3b) stub_cheap_signals and stub_provisional_rank REMOVED — real signals
-// now come from compute_cheap_signals.nf + fit_nb_mixture.nf + provisional_rank.nf.
-
-// Stand-in for: stage-2 bcftools SNP recovery + pseudo-rep concordance per survivor.
-// Real version = chunk 5. Takes a survivor candidate + the pseudo-rep reads.
-process stub_stage2 {
-    label 'basic'
-    tag "${meta.id}"
-    input:
-        tuple val(meta), path(candidate), path(pseudo_reads)
-    output:
-        path("stage2_${meta.id}.tsv"), emit: stage2_row
-    script:
-    """
-    echo "[STUB] stage-2 bcftools for survivor ${meta.id} using \$(ls *.fq.gz 2>/dev/null | wc -l) pseudo-rep fastqs"
-    # id n_snps concordance
-    printf "%s\\t0\\t0\\n" "${meta.id}" > stage2_${meta.id}.tsv
-    """
-}
-
-// Stand-in for: weight-free rank aggregation -> winning meta.id + summary/plot.
-// Real version = chunk 6.
-process stub_aggregate {
-    label 'basic'
-    tag "aggregate"
-    input:
-        path(provisional)
-        path(stage2_rows)
-    output:
-        path("best_id.value"),       emit: best_id
-        path("optimize_summary.tsv"),emit: summary
-        path("optimize_plot.png"),   emit: plot
-    script:
-    """
-    echo "[STUB] aggregate provisional + stage-2 rows"
-    cat ${provisional} > optimize_summary.tsv
-    # STUB winner = first survivor row's id from stage-2
-    cat stage2_*.tsv | head -n1 | cut -f1 > best_id.value
-    echo "[STUB] best_id:"; cat best_id.value
-    echo "stub plot" > optimize_plot.png
-    """
-}
+// now come from compute_cheap_signals.nf + fit_nb_mixture.nf + rank_and_select.nf.
+// (chunk 5b) stub_stage2 + stub_aggregate REMOVED — 1-pass design: compute_snp_signals
+// runs on ALL candidates, rank_and_select does the single weight-free aggregation.
 
 // Stand-in for: SELECT the winning candidate as the production reference and
 // publish it. Real version (chunk 6) — under Position B, candidates are already
@@ -213,19 +175,11 @@ workflow optimize_denovo {
         compute_cheap_signals( candidates )
         cheap_rows = compute_cheap_signals.out.cheap_row.collect()
 
-        // coverage-uniformity: map a small SEEDED subset to ALL candidates.
-        // sorted-before-take for cache stability (same determinism rule as pseudo-reps).
-        def cv_n = (params.cv_sample_n ?: 4) as int
-        cv_subset_reads = cleaned_reads
-            .toList()
-            .flatMap { rows -> new ArrayList(rows).sort { a, b -> a[0] <=> b[0] }.take( cv_n ) }
-            .flatMap { sid, r1, r2 -> [r1, r2] }
-            .collect()
-        // pair the (same) subset read-bag with every candidate
-        cv_in = candidates.combine( cv_subset_reads.map{ [it] } )
-            .map{ meta, fa, reads -> tuple(meta, fa, reads) }
-        compute_coverage_cv( cv_in, (params.cv_pileup_mult ?: 2) )
-        cv_rows = compute_coverage_cv.out.cv_row.collect()
+        // (5b) coverage-uniformity signal REMOVED — every coverage statistic we
+        // tried (idxstats CV/Gini, per-base frac_hi/Gini/CV) stayed correlated with
+        // assembly size on real data (frac_hi corr n_contigs = -0.80), i.e. it read
+        // pruning-aggressiveness not an independent quality axis. The genotype
+        // signals (concordance + r80) ARE size-orthogonal, so they carry quality now.
 
         // 5b: global NB-mixture cutoff1 from the pooled coverage distribution
         // (assembly_diagnostics now emits coverage_freq.txt; knee value is fallback).
@@ -258,60 +212,57 @@ workflow optimize_denovo {
         )
 
         // expected_loci flows to the rank step as a value read from the process file
-        // ("NA" when disabled; provisional_rank.R drops the anchor signal on "NA").
+        // ("NA" when disabled; rank R drops the anchor signal on "NA").
         expected_loci_ch = write_anchor_calc.out.expected_loci.map { f -> f.text.trim() }
 
-        def min_surv = (params.stage2_min_candidates ?: 3) as int
-        provisional_rank( cheap_rows, cv_rows, fit_nb_mixture.out.nb_cutoff1, expected_loci_ch, min_surv )
-        survivors_ch = provisional_rank.out.survivors
-
-
-
-        // ----- CONCORDANCE BRANCH: N highest-depth individuals, split 50/50 -----
-        // STUB selection: deterministic first-N by SORTED sample id (chunk 5 will
-        // replace with depth-based selection). Sort before take so the set is
-        // stable across runs (same cache-determinism issue as the assembly subset).
+        // ----- PSEUDO-REPLICATES: N highest-depth individuals, split 50/50 -----
+        // Used ONLY for the concordance signal (PASS A in compute_snp_signals).
+        // STUB selection: first-N by SORTED sample id (depth-based selection is a
+        // later refinement). Sort-before-take for cache stability.
         n_reps = params.n_pseudo_reps ?: 6
         concordance_indivs = cleaned_reads
             .toList()
             .flatMap { rows -> new ArrayList(rows).sort { a, b -> a[0] <=> b[0] }.take( n_reps as int ) }
         split_pseudo_rep( concordance_indivs, params.optimize_seed ?: 42 )
 
-        // Flatten pseudo-rep halves into a collected bag of fastqs for stage-2.
-        // Each emission: (parent, a_id, a_r1, a_r2, b_id, b_r1, b_r2)
+        // Flatten pseudo-rep halves into a collected bag of fastqs (every candidate
+        // gets the same bag). Each emission: (parent, a_id, a_r1, a_r2, b_id, b_r1, b_r2)
         pseudo_fastqs = split_pseudo_rep.out.pseudo_reps
             .flatMap{ parent, aid, ar1, ar2, bid, br1, br2 -> [ar1, ar2, br1, br2] }
             .collect()
 
-        // ----- STAGE 2: bcftools on SURVIVORS only -----
-        // Join survivor ids back to their candidate fastas, attach pseudo-rep reads.
-        survivor_ids = survivors_ch
-            .splitText()
-            .map{ it.trim() }
-            .filter{ it }
+        // ----- SNP-subset: seeded snp_sample_pct of samples for r80 + density -----
+        // sorted-before-take for cache stability; overlap with pseudo-reps is fine.
+        def snp_pct = (params.snp_sample_pct ?: 25) as int
+        snp_subset_reads = cleaned_reads
+            .toList()
+            .flatMap { rows ->
+                def sorted = new ArrayList(rows).sort { a, b -> a[0] <=> b[0] }
+                int n = Math.max(2, (int) Math.ceil(sorted.size() * snp_pct / 100.0))
+                sorted.take(n)
+            }
+            .flatMap { sid, r1, r2 -> [r1, r2] }
+            .collect()
 
-        survivor_candidates = candidates
-            .map{ meta, fa -> tuple(meta.id.toString(), meta, fa) }
-            .join( survivor_ids.map{ id -> tuple(id.toString(), true) } )
-            .map{ id, meta, fa, flag -> tuple(meta, fa) }
-
-        stage2_in = survivor_candidates
+        // ----- 1-PASS SNP SIGNALS on ALL candidates (no gate) -----
+        // Each candidate gets the pseudo-rep bag (PASS A concordance) + the snp
+        // subset bag (PASS B r80/density). Wrap each collected bag as one slot.
+        snp_in = candidates
             .combine( pseudo_fastqs.map{ [it] } )
-            .map{ meta, fa, reads -> tuple(meta, fa, reads) }
+            .combine( snp_subset_reads.map{ [it] } )
+            .map { meta, fa, preads, sreads -> tuple(meta, fa, preads, sreads) }
 
-        stub_stage2( stage2_in )
-        stage2_rows = stub_stage2.out.stage2_row.collect()
+        compute_snp_signals( snp_in, (params.r80_threshold ?: 0.8) )
+        snp_rows = compute_snp_signals.out.snp_row.collect()
 
-        // ----- AGGREGATE: weight-free rank aggregation -> winner -----
-        stub_aggregate( provisional_rank.out.provisional, stage2_rows )
+        // ----- SINGLE rank aggregation (no provisional/final split) -----
+        // Signals: NB cutoff1 proximity + anchor proximity + concordance (primary)
+        // + r80 loci + SNPs-per-locus. Inflection report-only. Emits final_rank.tsv
+        // + best_id.value (the winner). Weight-free rank aggregation.
+        rank_and_select( cheap_rows, snp_rows, fit_nb_mixture.out.nb_cutoff1, expected_loci_ch )
 
-        // ----- FINALIZE: SELECT the winning candidate as the production reference -----
-        // Position B: candidates are already full-sample assemblies, so finalize just
-        // selects the winner — it does NOT collect all candidates (they're all named
-        // denovo_reference.fa, which collides) and does NOT re-assemble. Join the
-        // winning id back to its single candidate and pass only that one through.
-        best_id_ch = stub_aggregate.out.best_id
-            .map { f -> f.text.trim() }
+        // ----- FINALIZE: select winning candidate as the production reference -----
+        best_id_ch = rank_and_select.out.best_id.map { f -> f.text.trim() }
 
         winning_candidate = candidates
             .map { meta, fa -> tuple(meta.id.toString(), meta, fa) }
@@ -328,6 +279,6 @@ workflow optimize_denovo {
         cutoff1_plot   = assembly_diagnostics.out.cutoff1_plot
         cutoff2_plot   = assembly_diagnostics.out.cutoff2_plot
         diag_summary   = assembly_diagnostics.out.summary
-        optimize_summary = stub_aggregate.out.summary
-        optimize_plot    = stub_aggregate.out.plot
+        optimize_summary = rank_and_select.out.final_rank
+        optimize_plot    = rank_and_select.out.plot
 }

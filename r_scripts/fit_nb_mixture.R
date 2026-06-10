@@ -55,6 +55,8 @@ fit_plot <- function(freq_df, mu1, th1, mu2, th2, p1, cutoff) {
     annotate("text", x = cutoff, y = max(freq_df$n),
              label = paste0("  cutoff1 = ", cutoff), color = "red", hjust = 0, vjust = 1) +
     scale_color_manual(values = c("steelblue", "darkorange"), name = NULL) +
+    scale_y_continuous(labels = scales::comma_format(),
+                      transform = scales::log10_trans()) +
     coord_cartesian(xlim = c(0, min(max(freq_df$cov), 60))) +
     labs(title = "NB-mixture fit on within-individual coverage",
          subtitle = "Grey = observed; lines = fitted NB components; red = posterior crossover (cutoff1)",
