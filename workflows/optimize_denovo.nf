@@ -120,23 +120,21 @@ process stub_aggregate {
 // publishDirs will be removed once finalize owns publishing).
 process stub_finalize_reference {
     label 'basic'
-    tag "finalize"
+    tag "finalize:${meta.id}"
+
+    // Position B: this is the SINGLE publish point for the production reference.
+    publishDir "${params.outdir}/denovo_assembly", mode: params.publish_dir_mode
+
     input:
-        path(best_id_file)      // file containing the winning meta.id
-        path(candidates)        // all candidate fastas, pick the winner by name
+        tuple val(meta), path(winning_reference, stageAs: 'winner_input.fa')
     output:
         path("denovo_reference.fa"), emit: reference
         path("assembly_stats.txt"),  emit: stats
     script:
     """
-    BEST=\$(cat ${best_id_file})
-    echo "[STUB] finalize reference for winner '\$BEST'"
-    if [ -f "candidate_\${BEST}.fa" ]; then
-        cp "candidate_\${BEST}.fa" denovo_reference.fa
-    else
-        echo ">stub_winner_\${BEST}" > denovo_reference.fa
-        echo "ACGTACGTACGTACGT"      >> denovo_reference.fa
-    fi
+    echo "Selected winning de novo reference: ${meta.id} (cutoff1=${meta.c1} cutoff2=${meta.c2} sim=${meta.sim})"
+    # Winner is already a full-sample assembly — stage it under the canonical name.
+    cp winner_input.fa denovo_reference.fa
     echo "Final reference contigs: \$(grep -c '^>' denovo_reference.fa)" > assembly_stats.txt
     cat assembly_stats.txt
     """
@@ -267,11 +265,21 @@ workflow optimize_denovo {
         // ----- AGGREGATE: weight-free rank aggregation -> winner -----
         stub_aggregate( stub_provisional_rank.out.provisional, stage2_rows )
 
-        // ----- FINALIZE: re-emit winning candidate as the production reference -----
-        // Pass best_id as a FILE (not a val) to avoid mixing a single-emission
-        // queue channel with the collected candidate-fasta value channel.
-        all_candidate_fastas = candidates.map{ meta, fa -> fa }.collect()
-        stub_finalize_reference( stub_aggregate.out.best_id, all_candidate_fastas )
+        // ----- FINALIZE: SELECT the winning candidate as the production reference -----
+        // Position B: candidates are already full-sample assemblies, so finalize just
+        // selects the winner — it does NOT collect all candidates (they're all named
+        // denovo_reference.fa, which collides) and does NOT re-assemble. Join the
+        // winning id back to its single candidate and pass only that one through.
+        best_id_ch = stub_aggregate.out.best_id
+            .map { f -> f.text.trim() }
+
+        winning_candidate = candidates
+            .map { meta, fa -> tuple(meta.id.toString(), meta, fa) }
+            .combine( best_id_ch )
+            .filter { id, meta, fa, best -> id == best.toString() }
+            .map { id, meta, fa, best -> tuple(meta, fa) }
+
+        stub_finalize_reference( winning_candidate )
 
     emit:
         reference      = stub_finalize_reference.out.reference

@@ -31,6 +31,24 @@ weight-free rank-aggregation selector over multiple non-circular signals.
   corner is already pruned (cutoff2_floor=3, no s0.80), so the surviving grid is
   the fast region.
 
+## CHUNK 3a/Position B — finalize filename-collision fix
+Position B made every candidate's reference literally `denovo_reference.fa`.
+The old finalize collected ALL candidate fastas into one process -> Nextflow
+"input file name collision: multiple input files denovo_reference.fa".
+FIX (also the correct chunk-6 selection logic): finalize now SELECTS only the
+winning candidate by joining best_id against the candidates channel:
+  winning_candidate = candidates.map{meta,fa->[id,meta,fa]}
+      .combine(best_id_ch).filter{id==best}.map{->[meta,fa]}
+  -> single (meta,fa) passed to finalize (no collect, no collision).
+finalize now:
+  - takes tuple(meta, path(winner, stageAs:'winner_input.fa'))  [stageAs avoids
+    cp-onto-itself since the real file is already named denovo_reference.fa]
+  - publishDir ${outdir}/denovo_assembly  [single publish point for production ref]
+  - tag finalize:${meta.id}
+Run before this fix: grid = 8 filter -> 24 candidates (8 cutoff x 3 sims), all
+real full-sample assemblies built OK; chain ran through aggregate; only finalize
+errored on the collision. So Position B assembly + scoring topology all work.
+
 ## PARAM rename (Position B)
 - optimize_sample_pct -> snp_sample_pct: now the fraction of samples used for the
   STAGE-2 SNP-recovery signal (chunk 5), NOT an assembly subset.
