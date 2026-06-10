@@ -48,8 +48,8 @@ params.cutoff1_floor               = 2        // lowest cutoff1 (per-individual 
 params.cutoff2_floor               = 3        // lowest cutoff2 (n individuals) in the grid; 2 = junk/bloat + slow CD-HIT, skipped by default
 
 // Subset used to BUILD candidate references (assembly branch, intact individuals).
-params.optimize_sample_pct = 25               // 100 = all samples
-params.optimize_seed       = 42               // deterministic subset + pseudo-rep split
+params.snp_sample_pct = 25               // fraction of samples used for STAGE-2 SNP-recovery scoring (NOT assembly; assembly uses all samples)
+params.optimize_seed       = 42               // deterministic pseudo-rep split + stage-2 SNP-sample selection
 
 // Pseudo-replicates for the concordance signal (stage 2). The N highest-depth
 // individuals are auto-selected and split 50/50; halves are used ONLY for

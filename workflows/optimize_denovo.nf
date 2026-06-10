@@ -112,9 +112,12 @@ process stub_aggregate {
     """
 }
 
-// Stand-in for: re-emit the winning candidate as the final reference + its stats.
-// Real version (chunk 6) re-runs full assemble_rainbow at the winning grid point
-// on ALL samples (not the subset) so the production reference is full-depth.
+// Stand-in for: SELECT the winning candidate as the production reference and
+// publish it. Real version (chunk 6) — under Position B, candidates are already
+// full-sample assemblies, so finalize does NOT re-assemble. It picks the winner's
+// existing denovo_reference.fa by meta.id and publishes it to a clean, stable
+// location (the single publishDir for the production reference; candidate
+// publishDirs will be removed once finalize owns publishing).
 process stub_finalize_reference {
     label 'basic'
     tag "finalize"
@@ -145,30 +148,17 @@ workflow optimize_denovo {
         cleaned_reads          // tuple(sample_id, r1, r2) — repaired reads (intact)
 
     main:
-        // ----- ASSEMBLY BRANCH: intact SUBSET -> per-sample uniq.seqs -----
-        // Deterministic subset by percentage (overlap with concordance allowed).
-        // Seeded shuffle then take ceil(pct%) so -resume is cache-stable.
-        def pct  = (params.optimize_sample_pct ?: 100) as int
-        def seed = (params.optimize_seed ?: 42) as long
+        // ----- ASSEMBLY BRANCH: ALL samples -> per-sample uniq.seqs -----
+        // Position B: candidate references are built from the FULL sample set, NOT
+        // a subset. Each candidate is therefore a real, production-grade assembly;
+        // the winner IS the production reference (finalize just selects/publishes
+        // it — no re-assembly). This makes cutoff2 (n-individuals) mean the SAME
+        // thing during optimization and in the final reference, which a subset
+        // would distort. The assembly seed/subset are gone here; optimize_seed and
+        // snp_sample_pct now govern the STAGE-2 SNP-recovery subset only (chunk 5).
+        assembly_all = cleaned_reads
 
-        assembly_subset = ( pct >= 100 )
-            ? cleaned_reads
-            : cleaned_reads
-                .toList()
-                .flatMap { rows ->
-                    // CRITICAL: sort by sample_id FIRST. cleaned_reads emission order
-                    // is NOT stable across runs (depends on task completion timing),
-                    // so shuffling the raw list — even with a fixed seed — gives a
-                    // different subset each run, busting the filter/assembly cache.
-                    // Sorting to a canonical order makes seed+input reproducible.
-                    def sorted = new ArrayList(rows).sort { a, b -> a[0] <=> b[0] }
-                    def shuffled = new ArrayList(sorted)
-                    Collections.shuffle(shuffled, new Random(seed))
-                    int n = Math.max(1, (int) Math.ceil(sorted.size() * pct / 100.0))
-                    shuffled.take(n)
-                }
-
-        extract_unique_seqs( assembly_subset )
+        extract_unique_seqs( assembly_all )
         all_uniq_seqs = extract_unique_seqs.out.uniq_seqs
             .map{ sid, f -> f }
             .collect()
