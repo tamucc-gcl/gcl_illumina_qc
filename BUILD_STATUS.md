@@ -234,6 +234,53 @@ Cheap signals/stage-2/finalize STILL STUBBED, so:
 Known 3a id detail: Groovy renders 0.80->"0.8", 0.90->"0.9" in ids. Internally
 consistent (join matches), just cosmetic. Will tidy display in report (chunk 7).
 
+## DECISION: go 1-PASS (SNP-call all candidates); cheap signals become ranking inputs
+84-candidate run diagnosis: cheap signals keep proving unreliable to GATE on.
+Redundancy died, inflection/NB collapse onto c1, and CV/Gini are SIZE-CONFOUNDED
+and ANTI-CORRELATED (corr n_contigs~CV=+0.80, ~Gini=-0.91, CV~Gini=-0.56) -> they
+cancel. A signal too unreliable to select on is too unreliable to gate on. So:
+- ABANDON 2-pass gating. SNP recovery (the non-circular signal that motivated the
+  whole redesign) runs on ALL candidates. Cheap signals become ranking INPUTS, not
+  a gate. CHUNK 4 (gap-based top-N) is DELETED from the plan — no longer needed.
+- stage2_min/max_candidates params become irrelevant.
+- provisional_rank + stage2 + aggregate collapse into ONE rank_and_select.
+
+GRID INSIGHT (84-run): cutoff2 was NOT flat — k3/k4 were similar but k5/k6 collapse
+contig count hard (c5_k3=50289 -> c5_k5=9402). Wide grid was the right call; winner
+moved to interior high-stringency (c5_k5_s0.90, ~9400 contigs).
+
+STACKS validation (Paris et al 2017 r80 rule): STACKS optimizes on # POLYMORPHIC
+loci shared across >=80% of individuals (r80) — deliberately size-robust (junk/
+paralog loci fail the 80% share test). Adopting: SNP signal = concordance (primary,
+pseudo-rep genotype agreement) + r80 shared-polymorphic-loci + SNPs-per-locus
+(secondary). r80 threshold = param. Compute all, prune after inspection.
+
+SNP module structure: 2 bcftools passes per candidate — concordance from pseudo-rep
+halves; r80 + SNP-density from snp_sample_pct subset.
+
+## CHUNK 5a — coverage signal upgraded to per-base depth (DONE; build sequenced 5a then 5b)
+The CV/Gini size-confound was an idxstats artifact (read-count dominated by # junk
+contigs). FIX: compute_coverage_cv.nf now uses samtools depth -a -> per-contig MEAN
+depth -> MEDIAN-NORMALIZED statistics. Emits THREE (prune later):
+  frac_hi (PRIMARY) = fraction of contigs with mean depth > cv_pileup_mult*median
+                      (direct paralog-pileup count; param cv_pileup_mult=2)
+  gini, cv (secondary, reported for comparison)
+Validation (synthetic, python): median-normalization makes ALL three size-robust
+(small vs big match at equal paralog level); frac>2x separates clean(2%) vs
+collapsed(15%) ~7.5x (best), gini 2.3x, cv 1.5x, MAD too dull (dropped).
+awk = computation only (two awks: depth->per-contig-mean, then stats), no multi-
+line strings (anchor-bug lesson).
+provisional_rank.R: reads new 7-col cv (id c1 c2 sim frac_hi gini cv); agg_rank now
+= mean(rank_nb, rank_frac_hi, rank_anchor) — frac_hi is the uniformity signal in the
+aggregate; gini/cv reported but NOT aggregated (they cancelled). main.nf +cv_pileup_mult=2.
+INSTALL 5a: modules/compute_coverage_cv.nf, r_scripts/provisional_rank.R,
+  workflows/optimize_denovo.nf (pileup_mult arg), main.nf (cv_pileup_mult).
+RUN: still 2-pass for now (5a is isolated). compute_coverage_cv x84 RE-RUN (per-base
+depth). Check cv rows: does frac_hi separate candidates AND is it size-robust (not
+just tracking n_contigs)? Then 5b = SNP module + 1-pass collapse.
+
+## write_anchor_calc — awk newline-escaping bug FIXED
+
 ## write_anchor_calc — awk newline-escaping bug FIXED
 First run of the refactored module failed: awk printf strings contained \n that
 became REAL newlines through the Groovy-triple-quote -> bash -> awk layers ->

@@ -62,8 +62,10 @@ params.optimize_seed       = 42               // deterministic pseudo-rep split 
 // concordance and never published (the intact individual goes to production).
 params.n_pseudo_reps = 6
 
-// Cheap-signal: coverage-uniformity subset size (samples mapped to each candidate for CV/Gini)
+// Cheap-signal: coverage-uniformity subset size (samples mapped to each candidate)
 params.cv_sample_n = 4
+// Paralog-pileup threshold: fraction of contigs with mean depth > mult * median
+params.cv_pileup_mult = 2
 
 // Two-stage handoff: cheap signals rank all candidates; the top-N by provisional
 // rank get the expensive bcftools step. N is auto-set by the largest gap in the

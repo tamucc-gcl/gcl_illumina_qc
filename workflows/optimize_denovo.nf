@@ -224,7 +224,7 @@ workflow optimize_denovo {
         // pair the (same) subset read-bag with every candidate
         cv_in = candidates.combine( cv_subset_reads.map{ [it] } )
             .map{ meta, fa, reads -> tuple(meta, fa, reads) }
-        compute_coverage_cv( cv_in )
+        compute_coverage_cv( cv_in, (params.cv_pileup_mult ?: 2) )
         cv_rows = compute_coverage_cv.out.cv_row.collect()
 
         // 5b: global NB-mixture cutoff1 from the pooled coverage distribution
