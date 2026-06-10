@@ -234,6 +234,21 @@ Cheap signals/stage-2/finalize STILL STUBBED, so:
 Known 3a id detail: Groovy renders 0.80->"0.8", 0.90->"0.9" in ids. Internally
 consistent (join matches), just cosmetic. Will tidy display in report (chunk 7).
 
+## write_anchor_calc — awk newline-escaping bug FIXED
+First run of the refactored module failed: awk printf strings contained \n that
+became REAL newlines through the Groovy-triple-quote -> bash -> awk layers ->
+"unterminated string" (a string literal can't span lines in awk).
+FIX: awk does ARITHMETIC ONLY now — prints `key=value` lines (no newline escapes
+anywhere in awk). The human-readable report is built by a plain bash heredoc
+(<<EOF) where newlines are literal. Shell loads awk's values via
+  while IFS='=' read k v; do eval "CV_$k=$v"; done < calc_vars.txt
+and the heredoc references them as \${CV_...} (Groovy-escaped so bash expands at
+runtime). Display numbers formatted in awk via sprintf (%.0f sites, %.3e/%.5f
+rates) — safe, no newlines. Validated end-to-end in bash: 652 loci, value file
+correct, report renders clean. Reinstall modules/write_anchor_calc.nf and -resume.
+
+## write_anchor_calc — calculation moved INTO the process (refactor)
+
 ## write_anchor_calc — calculation moved INTO the process (refactor)
 The anchor arithmetic was in Groovy (optimize_denovo.nf) with the process a dumb
 echo of a pre-baked string. Moved the WHOLE calculation into write_anchor_calc.nf
