@@ -17,7 +17,7 @@ process fit_nb_mixture {
     label 'optimize_rank'    // light R env (r-base + tidyverse); add if not present
     tag "nb_mixture_cutoff1"
 
-    publishDir "${params.outdir}/denovo_assembly/optimize", mode: params.publish_dir_mode, pattern: "nb_mixture_fit.txt"
+    publishDir "${params.outdir}/denovo_assembly/optimize", mode: params.publish_dir_mode, pattern: "nb_mixture_{fit.txt,plot.png}"
 
     input:
         path(coverage_freq)      // coverage_freq.txt: "<count> <coverage>" per line
@@ -26,6 +26,7 @@ process fit_nb_mixture {
     output:
         path("nb_cutoff1.value"), emit: nb_cutoff1
         path("nb_mixture_fit.txt"), emit: fit_summary
+        path("nb_mixture_plot.png"), emit: plot
 
     script:
     """

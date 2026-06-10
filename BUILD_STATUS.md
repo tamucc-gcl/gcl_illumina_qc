@@ -234,6 +234,89 @@ Cheap signals/stage-2/finalize STILL STUBBED, so:
 Known 3a id detail: Groovy renders 0.80->"0.8", 0.90->"0.9" in ids. Internally
 consistent (join matches), just cosmetic. Will tidy display in report (chunk 7).
 
+## Anchor model FIX + NB plot (pre-3c-test)
+Jason's real ddRAD params: genome ~1.3 Gb, SbfI (8-cutter) + EcoRI (6-cutter),
+insert ~150-221 bp (NOT the 280-350 bp fragment-trace window, which includes
+adapters — use the INSERT).
+BUG in old anchor model: 2*cuts1*cuts2/G * (win/mean_frag) underflowed to 0 for
+realistic genomes and wasn't rare-cutter anchored.
+FIX (rare-cutter-anchored exponential-spacing model): a ddRAD locus = a RARE-
+cutter site (larger recognition seq = SbfI 8) whose NEAREST COMMON-cutter site
+(EcoRI 6) falls in the insert window. Common spacing ~Exp(1/4^common_len);
+P_one_side = exp(-rate*min) - exp(-rate*max); P = 1-(1-p)^2;
+expected_loci = n_rare_sites * P. For Jason's params -> ~650 loci (validated in
+python). Model auto-assigns larger site_len as rare; param order doesn't matter.
+NOTE: candidates have 48k-93k contigs (~100x expected) — anchor will pull toward
+aggressively-pruned (high-c1) candidates, so it may partly reinforce NB; watch
+whether it adds independent info.
+Jason's run should add: --genome_size_est 1.3e9 --size_select_min 150
+  --size_select_max 221 --enzyme1_site_len 8 --enzyme2_site_len 6
+
+NB PLOT added: fit_nb_mixture.R now emits nb_mixture_plot.png (observed coverage
+histogram + both fitted NB component densities scaled to counts + red crossover
+line). Placeholder plot on fallback/failure. Process emits+publishes .plot to
+denovo_assembly/optimize/. optimize_rank env already has ggplot2 (via r-tidyverse)
+— no config change. (Report wiring = chunk 7.)
+
+## CHUNK 3c — cheap-signal rework (diagnosed from first 3b run)
+
+## CHUNK 3c — cheap-signal rework (diagnosed from first 3b run)
+PROBLEM (first 3b run): cheap stage did not discriminate. provisional_rank.tsv
+showed redundancy=0 for ALL 24 candidates (self-cluster at 0.98 on already-
+CD-HIT'd refs finds nothing -> DEAD signal), rank_anchor=NA (no enzyme params),
+and rank_inflect + rank_nb are BOTH essentially functions of c1 pulling opposite
+directions -> averaging cancels -> near-tied arbitrary winner. Three of four
+signals were c1-functions; only redundancy was meant to be orthogonal and it was
+dead.
+NB-mixture itself worked great: low mu=1.27 (errors), high mu=8.96 (loci),
+crossover cutoff1=5 (genuine 2-component fit; matched knee by coincidence).
+
+FIX (chunk 3c):
+- DROP redundancy (1b): inherently ~0 for CD-HIT'd refs.
+- DROP paired-locus fraction (option 4): all contigs paired by construction
+  (N-spacer joins fwd/rev before assembly) -> constant.
+- DROP length-distribution (option 3): ddRAD contigs are read-length-governed
+  (~2x read_len) -> flat across grid.
+- DEMOTE inflection (1a) to REPORT-ONLY (kept as dist_inflect column, EXCLUDED
+  from agg_rank; duplicates NB on c1 axis).
+- KEEP NB cutoff1 (5b) as the c1-axis authority.
+- ADD coverage-uniformity (option 2): map a seeded cv_sample_n subset (default 4)
+  to ALL candidates in STAGE 1; compute CV and Gini of per-contig depth. This is
+  the QUALITY signal that discriminates along c2/similarity (where NB is blind).
+  Paralog collapse -> fat high-depth tail -> high CV/Gini.
+  Depth proxy: samtools idxstats read-count per contig, normalized reads-per-bp
+  (so contig-length variation isn't mistaken for depth non-uniformity).
+  NOTE: idxstats is a proxy; upgrade to per-base `samtools depth` if CV is noisy.
+- This MOVES the stage line: STAGE 1 now includes light CV mapping on all
+  candidates; STAGE 2 = heavy bcftools on survivors only.
+
+Ranking signals now ORTHOGONAL: NB(c1) + CV + Gini (c2/sim quality) + anchor(opt).
+awk CV+Gini logic validated vs python: uniform->0/0, [1,1,1,1,100]->CV=1.9038/
+Gini=0.7615 (exact match).
+
+NEW: modules/compute_coverage_cv.nf (label map_reads), param cv_sample_n=4.
+REVISED: compute_cheap_signals.nf (redundancy removed, 7-col output),
+  provisional_rank.R (NB+CV+Gini+anchor; inflection report-only; reads cheap+cv,
+  joins on id), provisional_rank.nf (+cv_rows input), optimize_denovo.nf (CV
+  subset+wiring), main.nf (cv_sample_n replaces optimize_redundancy_identity).
+Validated: rank aggregation balance + column contracts (cheap 7, cv 6) + cv_in
+channel arity (each candidate paired with flat 8-file subset; glob finds 4 R1).
+
+INSTALL (chunk 3c):
+  modules/compute_coverage_cv.nf   (new)
+  modules/compute_cheap_signals.nf (overwrite — redundancy removed)
+  modules/provisional_rank.nf      (overwrite — +cv_rows)
+  r_scripts/provisional_rank.R     (overwrite — new signal set)
+  workflows/optimize_denovo.nf     (overwrite — CV wiring)
+  main.nf                          (overwrite — cv_sample_n)
+RUN: cached thru assemble_rainbow (24). NEW: compute_coverage_cv x24 (light map
+of 4-sample subset to each candidate), compute_cheap_signals x24 (re-run, now
+7-col), provisional_rank x1. Inspect denovo_assembly/optimize/provisional_rank.tsv
+-> CV/Gini columns should VARY across c2/sim (the whole point); agg_rank should
+pick interior, not size-extreme.
+
+## CHUNK 3b — outputs now published (added after first 3b run)
+
 ## CHUNK 3b — outputs now published (added after first 3b run)
 First 3b run succeeded but outputs were invisible (no publishDir — they sat in
 work/ only). Added publishDir to ${outdir}/denovo_assembly/optimize/:

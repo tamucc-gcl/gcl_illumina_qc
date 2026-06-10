@@ -17,7 +17,7 @@
 # falls back to the knee value so the pipeline never breaks on this signal.
 
 suppressPackageStartupMessages({
-  library(readr); library(dplyr)
+  library(readr); library(dplyr); library(ggplot2)
 })
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -27,12 +27,60 @@ knee_file <- args[2]
 fallback <- tryCatch(as.integer(readLines(knee_file)[1]), error = function(e) 4L)
 if (is.na(fallback)) fallback <- 4L
 
-write_out <- function(val, msg) {
+PLOT_FILE <- "nb_mixture_plot.png"
+
+# Emit a placeholder plot when we cannot/do not fit (keeps the output present so
+# the channel cardinality and report wiring stay valid).
+placeholder_plot <- function(msg) {
+  png(PLOT_FILE, width = 800, height = 600)
+  plot.new(); text(0.5, 0.5, msg, cex = 1.4, col = "grey40")
+  dev.off()
+}
+
+# Full overlay plot: observed coverage histogram + the two fitted NB component
+# densities (scaled to counts) + the crossover cutoff1 line.
+fit_plot <- function(freq_df, mu1, th1, mu2, th2, p1, cutoff) {
+  total <- sum(freq_df$n)
+  xs <- seq(min(freq_df$cov), max(freq_df$cov))
+  comp1 <- p1       * dnbinom(xs, size = th1, mu = mu1) * total
+  comp2 <- (1 - p1) * dnbinom(xs, size = th2, mu = mu2) * total
+  dens <- bind_rows(
+    tibble(cov = xs, count = comp1, component = sprintf("error (mu=%.1f)", mu1)),
+    tibble(cov = xs, count = comp2, component = sprintf("locus (mu=%.1f)", mu2))
+  )
+  p <- ggplot() +
+    geom_col(data = freq_df, aes(cov, n), fill = "grey80", color = NA, width = 1) +
+    geom_line(data = dens, aes(cov, count, color = component), linewidth = 1) +
+    geom_vline(xintercept = cutoff, color = "red", linetype = "dashed", linewidth = 0.9) +
+    annotate("text", x = cutoff, y = max(freq_df$n),
+             label = paste0("  cutoff1 = ", cutoff), color = "red", hjust = 0, vjust = 1) +
+    scale_color_manual(values = c("steelblue", "darkorange"), name = NULL) +
+    coord_cartesian(xlim = c(0, min(max(freq_df$cov), 60))) +
+    labs(title = "NB-mixture fit on within-individual coverage",
+         subtitle = "Grey = observed; lines = fitted NB components; red = posterior crossover (cutoff1)",
+         x = "Within-individual coverage (reads per unique sequence)",
+         y = "Number of unique sequences") +
+    theme_classic() +
+    theme(plot.title = element_text(face = "bold", size = 13),
+          legend.position = "top")
+  ggsave(PLOT_FILE, p, width = 8, height = 6, dpi = 200)
+}
+
+write_out <- function(val, msg, freq_df = NULL, fit = NULL) {
   val <- as.integer(round(val))
   if (is.na(val) || val < 2L) val <- 2L
   writeLines(as.character(val), "nb_cutoff1.value")
   writeLines(msg, "nb_mixture_fit.txt")
   cat(msg, "\n")
+  # plot: full overlay if we have a fit, else a labelled placeholder
+  if (!is.null(freq_df) && !is.null(fit)) {
+    tryCatch(
+      fit_plot(freq_df, fit$mu1, fit$th1, fit$mu2, fit$th2, fit$p1, val),
+      error = function(e) placeholder_plot(paste("NB plot failed:", conditionMessage(e)))
+    )
+  } else {
+    placeholder_plot(sub("\n.*", "", msg))
+  }
   quit(save = "no", status = 0)
 }
 
@@ -122,4 +170,6 @@ msg <- sprintf(paste0("NB-mixture cutoff1 fit\n",
   "  knee fallback = %d\n"),
   mu1, th1, p1, mu2, th2, 1 - p1, as.integer(nb_cut), fallback)
 
-write_out(nb_cut, msg)
+write_out(nb_cut, msg,
+          freq_df = freq,
+          fit = list(mu1 = mu1, th1 = th1, mu2 = mu2, th2 = th2, p1 = p1))

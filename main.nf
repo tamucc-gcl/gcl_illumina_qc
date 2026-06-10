@@ -56,8 +56,8 @@ params.optimize_seed       = 42               // deterministic pseudo-rep split 
 // concordance and never published (the intact individual goes to production).
 params.n_pseudo_reps = 6
 
-// Cheap-signal 1b: self-cluster identity for residual-redundancy detection
-params.optimize_redundancy_identity = 0.98
+// Cheap-signal: coverage-uniformity subset size (samples mapped to each candidate for CV/Gini)
+params.cv_sample_n = 4
 
 // Two-stage handoff: cheap signals rank all candidates; the top-N by provisional
 // rank get the expensive bcftools step. N is auto-set by the largest gap in the
@@ -68,12 +68,12 @@ params.stage2_max_candidates = 10
 // --- Optional biological locus-count anchor (signal 2) ---
 // If ALL THREE are supplied, expected RAD locus count is estimated and proximity
 // to it becomes one of the ranking signals. If ANY is null, signal 2 is skipped.
-params.enzyme_pair       = null   // e.g. "SbfI-MspI" (informational; cut-site model uses recognition lengths below if given)
-params.genome_size_est   = null   // estimated genome size in bp, e.g. 1.2e9
-params.size_select_min   = null   // size-selection lower bound in bp, e.g. 300
-params.size_select_max   = null   // size-selection upper bound in bp, e.g. 500
-// Optional: recognition-site lengths for the cut-site frequency model.
-// Defaults assume two 6-cutters if enzyme_pair given without explicit lengths.
+params.enzyme_pair       = null   // e.g. "SbfI-EcoRI" (informational; model uses recognition-site lengths below)
+params.genome_size_est   = null   // estimated genome size in bp, e.g. 1.3e9
+params.size_select_min   = null   // INSERT lower bound in bp (genomic DNA between cut sites; NOT the fragment-trace window, which includes adapters), e.g. 150
+params.size_select_max   = null   // INSERT upper bound in bp, e.g. 221
+// Recognition-site lengths (bp). Model auto-assigns the LARGER as the rare cutter.
+// e.g. SbfI=8, EcoRI=6. Order does not matter.
 params.enzyme1_site_len  = 6
 params.enzyme2_site_len  = 4
 

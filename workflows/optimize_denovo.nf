@@ -27,6 +27,7 @@ include { split_pseudo_rep }     from '../modules/split_pseudo_rep.nf'
 include { filter_unique_seqs_candidate } from '../modules/filter_unique_seqs_candidate.nf'
 include { assemble_rainbow_candidate }   from '../modules/assemble_rainbow_candidate.nf'
 include { compute_cheap_signals }       from '../modules/compute_cheap_signals.nf'
+include { compute_coverage_cv }          from '../modules/compute_coverage_cv.nf'
 include { fit_nb_mixture }               from '../modules/fit_nb_mixture.nf'
 include { provisional_rank }             from '../modules/provisional_rank.nf'
 
@@ -191,12 +192,33 @@ workflow optimize_denovo {
         candidates = assemble_rainbow_candidate.out.reference   // tuple(meta, denovo_reference.fa)
 
         // ----- STAGE 1: CHEAP signals per candidate -> provisional rank -----
-        // 1a inflection inputs + 1b redundancy + 2 anchor input, per candidate.
-        // redundancy self-cluster identity: tighter than any grid sim so it surfaces
-        // residual near-duplicate contigs (default 0.98).
-        def redun_identity = (params.optimize_redundancy_identity ?: 0.98) as double
-        compute_cheap_signals( candidates, redun_identity )
+        // Signal set (chunk 3c):
+        //   NB cutoff1 (5b)         : ranks the c1 axis (coverage-cutoff authority)
+        //   coverage CV + Gini (2)  : rank assembly QUALITY along c2/similarity
+        //   anchor (2, optional)    : ranks contig count vs expected RAD loci
+        //   inflection (1a)         : computed but REPORT-ONLY (excluded from agg;
+        //                             it duplicates NB on the c1 axis)
+        // Dropped: redundancy (inherently ~0 for CD-HIT'd refs), paired-locus
+        // fraction (all contigs paired by construction), length-dist (read-length
+        // governed -> flat). See BUILD_STATUS chunk 3c rationale.
+
+        // contig stats for inflection (report) + n_contigs for anchor
+        compute_cheap_signals( candidates )
         cheap_rows = compute_cheap_signals.out.cheap_row.collect()
+
+        // coverage-uniformity: map a small SEEDED subset to ALL candidates.
+        // sorted-before-take for cache stability (same determinism rule as pseudo-reps).
+        def cv_n = (params.cv_sample_n ?: 4) as int
+        cv_subset_reads = cleaned_reads
+            .toList()
+            .flatMap { rows -> new ArrayList(rows).sort { a, b -> a[0] <=> b[0] }.take( cv_n ) }
+            .flatMap { sid, r1, r2 -> [r1, r2] }
+            .collect()
+        // pair the (same) subset read-bag with every candidate
+        cv_in = candidates.combine( cv_subset_reads.map{ [it] } )
+            .map{ meta, fa, reads -> tuple(meta, fa, reads) }
+        compute_coverage_cv( cv_in )
+        cv_rows = compute_coverage_cv.out.cv_row.collect()
 
         // 5b: global NB-mixture cutoff1 from the pooled coverage distribution
         // (assembly_diagnostics now emits coverage_freq.txt; knee value is fallback).
@@ -205,36 +227,38 @@ workflow optimize_denovo {
             assembly_diagnostics.out.cutoff1_value
         )
 
-        // 2 anchor: expected RAD locus count from enzyme/genome/size-selection params.
-        // Cut-site model: each enzyme cuts ~once per 4^site_len bp; double-digest
-        // fragments bounded by the two cut frequencies; fraction in the size window
-        // approximated by window_width / mean_fragment_length. If any input missing,
-        // expected = "NA" and signal 2 is dropped in the rank script.
+        // 2 anchor: expected ddRAD locus count from enzyme/genome/size-selection.
+        // CORRECT ddRAD model (rare-cutter anchored): a usable locus is a RARE-cutter
+        // site (e.g. SbfI 8-cutter) whose NEAREST COMMON-cutter site (e.g. EcoRI
+        // 6-cutter) falls within the INSERT size window. Common-cutter spacing is
+        // ~Exponential(rate = 1/4^common_site_len), so the per-side probability the
+        // nearest site lands in [min,max] is exp(-rate*min) - exp(-rate*max); two
+        // sides combine as 1-(1-p)^2. expected_loci = n_rare_sites * P_window.
+        // IMPORTANT: use the INSERT window (genomic DNA between cut sites), NOT the
+        // fragment-analyzer trace window (which includes adapters).
         def expected_loci = "NA"
         if (params.genome_size_est && params.size_select_min && params.size_select_max) {
             def G   = params.genome_size_est as double
             def s1  = (params.enzyme1_site_len ?: 6) as int
             def s2  = (params.enzyme2_site_len ?: 4) as int
-            // expected cut sites for each enzyme across the genome (both strands ~ /2 cancels in ratio)
-            def cuts1 = G / Math.pow(4, s1)
-            def cuts2 = G / Math.pow(4, s2)
-            // double-digest fragments flanked by one of each enzyme: density ~ 2*cuts1*cuts2/G
-            // (Poisson-spacing approximation for AB/BA fragments along the genome)
-            def dd_fragments = 2.0 * cuts1 * cuts2 / G
-            def mean_frag = G / dd_fragments
-            def win = (params.size_select_max as double) - (params.size_select_min as double)
-            // fraction of an exponential fragment-length distribution within the window,
-            // centered near the window: approximate retained fraction = win / mean_frag, capped at 1
-            def frac = Math.min(1.0, win / mean_frag)
-            def exp_loci = Math.round(dd_fragments * frac)
+            // rare cutter = larger recognition site (cuts less often)
+            def rare_len   = Math.max(s1, s2)
+            def common_len = Math.min(s1, s2)
+            def n_rare     = G / Math.pow(4, rare_len)
+            def common_rate = 1.0 / Math.pow(4, common_len)   // common sites per bp
+            def imin = params.size_select_min as double
+            def imax = params.size_select_max as double
+            def p_one = Math.exp(-common_rate * imin) - Math.exp(-common_rate * imax)
+            def p_win = 1.0 - Math.pow(1.0 - p_one, 2)
+            def exp_loci = Math.round(n_rare * p_win)
             expected_loci = exp_loci.toString()
-            log.info "Biological anchor: expected ~${expected_loci} RAD loci (enzymes ${s1}/${s2}-cutter, genome ${G} bp, window ${params.size_select_min}-${params.size_select_max} bp)"
+            log.info "Biological anchor: expected ~${expected_loci} ddRAD loci (rare ${rare_len}-cutter x ${String.format('%.0f', n_rare)} sites, common ${common_len}-cutter, insert window ${imin}-${imax} bp)"
         } else {
-            log.info "Biological anchor (signal 2) disabled — supply genome_size_est + size_select_min/max to enable"
+            log.info "Biological anchor (signal 2) disabled — supply genome_size_est + size_select_min/max (INSERT window, not trace) to enable"
         }
 
         def min_surv = (params.stage2_min_candidates ?: 3) as int
-        provisional_rank( cheap_rows, fit_nb_mixture.out.nb_cutoff1, expected_loci, min_surv )
+        provisional_rank( cheap_rows, cv_rows, fit_nb_mixture.out.nb_cutoff1, expected_loci, min_surv )
         survivors_ch = provisional_rank.out.survivors
 
 
