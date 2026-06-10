@@ -234,6 +234,64 @@ Cheap signals/stage-2/finalize STILL STUBBED, so:
 Known 3a id detail: Groovy renders 0.80->"0.8", 0.90->"0.9" in ids. Internally
 consistent (join matches), just cosmetic. Will tidy display in report (chunk 7).
 
+## write_anchor_calc — calculation moved INTO the process (refactor)
+The anchor arithmetic was in Groovy (optimize_denovo.nf) with the process a dumb
+echo of a pre-baked string. Moved the WHOLE calculation into write_anchor_calc.nf
+(awk) so the model is self-contained, testable, single-source-of-truth.
+- write_anchor_calc.nf now takes raw vals (enabled flag, genome_size, two site
+  lengths, insert min/max, enzyme_pair) and DOES the math in awk:
+  rare/common from max/min site len, n_rare=G/4^rare, common_rate=1/4^common,
+  p_one=exp(-rate*imin)-exp(-rate*imax), p_win=1-(1-p_one)^2, loci=round(n_rare*p_win).
+  Emits expected_loci.value (int or "NA") + expected_loci_calculation.txt (published).
+  awk validated vs python: 652 loci for 1.3Gb/SbfI8/EcoRI6/insert150-221 (exact).
+- optimize_denovo.nf: Groovy now ONLY sets anchor_enabled boolean + passes raw
+  params; reads expected_loci from write_anchor_calc.out.expected_loci.map{f->text}.
+  provisional_rank now gets expected_loci_ch (value channel from file) not a Groovy
+  string; rank R drops anchor on "NA" as before.
+Install: workflows/optimize_denovo.nf + modules/write_anchor_calc.nf (this round).
+
+## GRID CEILING fix + expected-loci output (after first 3c run)
+
+## GRID CEILING fix + expected-loci output (after first 3c run)
+First 3c run (real ddRAD params: 1.3Gb, SbfI-8/EcoRI-6, insert 150-221) results:
+- NB plot: clean 2-component fit, error mu=1.3 / locus mu=9.0, crossover=5.
+  Locus component visually tiny (most UNIQUE SEQS are errors; loci hold the READS).
+- CV/Gini DID discriminate (cv ~4.7-5.8, gini ~0.79-0.82) — 3c goal met, signals
+  vary across c2/sim. Top candidate c4_k3_s0.90 (interior, not size-extreme). Good.
+
+PROBLEM Jason caught: NB crossover=5 == grid c1 ceiling (knee capped at 5 in
+assembly_diagnostics.R). So rank_nb is degenerate — it can only ever favor c1=5
+(the highest available = the NB value), can't bracket an optimum that might be
+higher. rank_nb is also coarse: just 4 c1-levels -> 4 tied ranks (3.5/9.5/15.5/
+21.5). Circular: NB asked to discriminate within a range truncated at the NB value.
+
+FIX: explicit grid CEILINGS decoupled from the auto-detect knee.
+  NEW params: cutoff1_ceiling=8, cutoff2_ceiling=6 (main.nf). Grid is now
+  floor..ceiling (pure param range); diagnostics knee still computed for the
+  report + as NB fallback, but NO LONGER bounds the optimization grid.
+  optimize_denovo.nf: c1_vals/c2_vals = Channel.value(floor..ceiling), no longer
+  read cutoff*_value for the grid.
+  Grid: c1{2..8}x c2{3..6} x sim{.85,.90,.95} = 7x4x3 = 84 candidates (was 24).
+  Jason chose widest bracketing (84) over tighter options. Assembly is cached
+  after first run so the cost is paid once.
+
+EXPECTED-LOCI OUTPUT (Jason asked where the anchor calc goes): NEW module
+write_anchor_calc.nf writes expected_loci_calculation.txt to
+denovo_assembly/optimize/ — full arithmetic (rare/common sites, per-side window
+prob, P_window, expected loci) or a DISABLED note listing missing params. Wired
+in optimize_denovo.nf; was previously only in the nextflow log.
+
+INSTALL (this round): main.nf, workflows/optimize_denovo.nf,
+modules/write_anchor_calc.nf (new), modules/fit_nb_mixture.nf + r_scripts/
+fit_nb_mixture.R (NB plot, from prior turn). Run with:
+  --genome_size_est 1.3e9 --size_select_min 150 --size_select_max 221
+  --enzyme1_site_len 8 --enzyme2_site_len 6
+Expect 84 candidate assemblies (fresh; grid changed). Then re-inspect
+provisional_rank.tsv: with c1 now 2..8, does rank_nb bracket an INTERIOR c1
+(i.e. is the best c1 < 8)? And does anchor (~650 expected) add info vs rank_nb?
+
+## Anchor model FIX + NB plot (pre-3c-test)
+
 ## Anchor model FIX + NB plot (pre-3c-test)
 Jason's real ddRAD params: genome ~1.3 Gb, SbfI (8-cutter) + EcoRI (6-cutter),
 insert ~150-221 bp (NOT the 280-350 bp fragment-trace window, which includes

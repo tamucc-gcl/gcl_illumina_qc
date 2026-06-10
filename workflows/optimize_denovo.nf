@@ -30,6 +30,7 @@ include { compute_cheap_signals }       from '../modules/compute_cheap_signals.n
 include { compute_coverage_cv }          from '../modules/compute_coverage_cv.nf'
 include { fit_nb_mixture }               from '../modules/fit_nb_mixture.nf'
 include { provisional_rank }             from '../modules/provisional_rank.nf'
+include { write_anchor_calc }            from '../modules/write_anchor_calc.nf'
 
 // ---------------------------------------------------------------------------
 // STUB PROCESSES — echo placeholders. Replaced in later chunks.
@@ -141,17 +142,23 @@ workflow optimize_denovo {
         // Independent floors: cutoff1_floor (per-individual coverage) and
         // cutoff2_floor (n individuals). cutoff2_floor defaults to 3 — the k2 corner
         // is biologically junky AND the slowest to assemble (CD-HIT cost).
-        def c1_floor = (params.cutoff1_floor ?: 2) as int
-        def c2_floor = (params.cutoff2_floor ?: 3) as int
+        // Grid is floor..ceiling on each cutoff (EXPLICIT ceilings — NOT the
+        // auto-detect knee, which capped c1 at 5 / c2 at 4 and made the NB signal
+        // degenerate by truncating the grid at the NB value itself). Extending the
+        // ceiling above the expected optimum lets NB/quality signals bracket it in
+        // the interior. The diagnostics knee is still computed (for the report and
+        // as the NB fallback) but no longer bounds the optimization grid.
+        def c1_floor   = (params.cutoff1_floor ?: 2) as int
+        def c2_floor   = (params.cutoff2_floor ?: 3) as int
+        def c1_ceiling = (params.cutoff1_ceiling ?: 8) as int
+        def c2_ceiling = (params.cutoff2_ceiling ?: 6) as int
 
         c1_vals = (params.cutoff1 != null)
             ? Channel.value( [ params.cutoff1 as int ] )
-            : assembly_diagnostics.out.cutoff1_value
-                .map { f -> def k = f.text.trim() as int; (c1_floor..Math.max(c1_floor, k)).toList() }
+            : Channel.value( (c1_floor..Math.max(c1_floor, c1_ceiling)).toList() )
         c2_vals = (params.cutoff2 != null)
             ? Channel.value( [ params.cutoff2 as int ] )
-            : assembly_diagnostics.out.cutoff2_value
-                .map { f -> def k = f.text.trim() as int; (c2_floor..Math.max(c2_floor, k)).toList() }
+            : Channel.value( (c2_floor..Math.max(c2_floor, c2_ceiling)).toList() )
 
         // Cutoff combos = c1 x c2 (filtering is similarity-INDEPENDENT, so filter
         // runs ONCE per (c1,c2) and is later crossed with similarities).
@@ -227,38 +234,35 @@ workflow optimize_denovo {
             assembly_diagnostics.out.cutoff1_value
         )
 
-        // 2 anchor: expected ddRAD locus count from enzyme/genome/size-selection.
-        // CORRECT ddRAD model (rare-cutter anchored): a usable locus is a RARE-cutter
-        // site (e.g. SbfI 8-cutter) whose NEAREST COMMON-cutter site (e.g. EcoRI
-        // 6-cutter) falls within the INSERT size window. Common-cutter spacing is
-        // ~Exponential(rate = 1/4^common_site_len), so the per-side probability the
-        // nearest site lands in [min,max] is exp(-rate*min) - exp(-rate*max); two
-        // sides combine as 1-(1-p)^2. expected_loci = n_rare_sites * P_window.
-        // IMPORTANT: use the INSERT window (genomic DNA between cut sites), NOT the
-        // fragment-analyzer trace window (which includes adapters).
-        def expected_loci = "NA"
-        if (params.genome_size_est && params.size_select_min && params.size_select_max) {
-            def G   = params.genome_size_est as double
-            def s1  = (params.enzyme1_site_len ?: 6) as int
-            def s2  = (params.enzyme2_site_len ?: 4) as int
-            // rare cutter = larger recognition site (cuts less often)
-            def rare_len   = Math.max(s1, s2)
-            def common_len = Math.min(s1, s2)
-            def n_rare     = G / Math.pow(4, rare_len)
-            def common_rate = 1.0 / Math.pow(4, common_len)   // common sites per bp
-            def imin = params.size_select_min as double
-            def imax = params.size_select_max as double
-            def p_one = Math.exp(-common_rate * imin) - Math.exp(-common_rate * imax)
-            def p_win = 1.0 - Math.pow(1.0 - p_one, 2)
-            def exp_loci = Math.round(n_rare * p_win)
-            expected_loci = exp_loci.toString()
-            log.info "Biological anchor: expected ~${expected_loci} ddRAD loci (rare ${rare_len}-cutter x ${String.format('%.0f', n_rare)} sites, common ${common_len}-cutter, insert window ${imin}-${imax} bp)"
+        // 2 anchor: expected ddRAD locus count. The CALCULATION now lives entirely
+        // in write_anchor_calc (awk), which is the single source of truth and emits
+        // both expected_loci.value (consumed by the rank step) and a published
+        // human-readable breakdown. Here we only decide enabled vs disabled and pass
+        // raw params through. IMPORTANT: insert window = genomic DNA between cut
+        // sites, NOT the fragment-analyzer trace (which includes adapters).
+        def anchor_enabled = (params.genome_size_est && params.size_select_min && params.size_select_max) as boolean
+        if (anchor_enabled) {
+            log.info "Biological anchor ENABLED: computing expected ddRAD loci (genome ${params.genome_size_est} bp, enzymes ${params.enzyme1_site_len}/${params.enzyme2_site_len}-cutter, insert ${params.size_select_min}-${params.size_select_max} bp)"
         } else {
-            log.info "Biological anchor (signal 2) disabled — supply genome_size_est + size_select_min/max (INSERT window, not trace) to enable"
+            log.info "Biological anchor (signal 2) DISABLED — supply genome_size_est + size_select_min/max (INSERT window, not trace) to enable"
         }
 
+        write_anchor_calc(
+            anchor_enabled,
+            params.genome_size_est ?: '',
+            params.enzyme1_site_len ?: 6,
+            params.enzyme2_site_len ?: 4,
+            params.size_select_min ?: '',
+            params.size_select_max ?: '',
+            params.enzyme_pair
+        )
+
+        // expected_loci flows to the rank step as a value read from the process file
+        // ("NA" when disabled; provisional_rank.R drops the anchor signal on "NA").
+        expected_loci_ch = write_anchor_calc.out.expected_loci.map { f -> f.text.trim() }
+
         def min_surv = (params.stage2_min_candidates ?: 3) as int
-        provisional_rank( cheap_rows, cv_rows, fit_nb_mixture.out.nb_cutoff1, expected_loci, min_surv )
+        provisional_rank( cheap_rows, cv_rows, fit_nb_mixture.out.nb_cutoff1, expected_loci_ch, min_surv )
         survivors_ch = provisional_rank.out.survivors
 
 

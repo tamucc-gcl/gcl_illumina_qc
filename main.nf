@@ -41,11 +41,17 @@ params.final_similarity = 0.9
 // --- De novo cutoff/similarity optimization ---
 params.do_optimize = false
 
-// Grid to search. Knee values from diagnostics act as CEILINGS for c1/c2 unless
-// pinned. Explicit --cutoff1/--cutoff2/--cluster_similarity PIN that dimension.
+// Grid to search. Floors set the low end; CEILINGS set the high end. The grid
+// runs floor..ceiling on each cutoff. Ceilings are EXPLICIT (not the auto-detect
+// knee), so the grid can bracket the NB/quality optimum in its INTERIOR rather
+// than truncating at the knee (which made the NB signal degenerate — it could
+// never favor a c1 above its own value). Set ceilings above where you expect the
+// optimum. Explicit --cutoff1/--cutoff2/--cluster_similarity PIN that dimension.
 params.optimize_cluster_similarity = [0.85, 0.90, 0.95]
 params.cutoff1_floor               = 2        // lowest cutoff1 (per-individual coverage) in the grid
+params.cutoff1_ceiling             = 8        // highest cutoff1 in the grid (was knee-capped at 5; extend so NB optimum is interior)
 params.cutoff2_floor               = 3        // lowest cutoff2 (n individuals); 2 = junk/bloat + slow CD-HIT, skipped by default
+params.cutoff2_ceiling             = 6        // highest cutoff2 in the grid (was knee-capped at 4)
 
 // Subset used to BUILD candidate references (assembly branch, intact individuals).
 params.snp_sample_pct = 25               // fraction of samples used for STAGE-2 SNP-recovery scoring (NOT assembly; assembly uses all samples)
