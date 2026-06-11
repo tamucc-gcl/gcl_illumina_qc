@@ -180,8 +180,10 @@ msg <- sprintf(paste0("NB-mixture cutoff1 fit\n",
   "  low component:  mu=%.2f theta=%.2f (mix=%.2f)\n",
   "  high component: mu=%.2f theta=%.2f (mix=%.2f)\n",
   "  posterior crossover (cutoff1) = %d\n",
-  "  knee fallback = %d\n"),
-  mu1, th1, p1, mu2, th2, 1 - p1, as.integer(nb_cut), fallback)
+  "  knee fallback = %d\n",
+  "  input: %d coverage bins, %s total unique sequences, max count = %s\n"),
+  mu1, th1, p1, mu2, th2, 1 - p1, as.integer(nb_cut), fallback,
+  nrow(freq), format(sum(freq$n), big.mark=","), format(max(freq$n), big.mark=","))
 
 write_out(nb_cut, msg,
           freq_df = freq,

@@ -20,7 +20,19 @@ workflow denovo_assembly {
     main:
         // Axes can now be scalars OR lists (grid model). The single-assembly path
         // needs ONE value per axis, so coerce: list -> first element, scalar -> itself.
-        def firstOf = { v -> (v instanceof List) ? (v.isEmpty() ? null : v[0]) : v }
+        // First value of an axis (single-assembly path needs ONE value). Handles
+        // real lists, scalars, and CLI list-strings ("[3,5]" / "3,5") consistently
+        // with the optimize-path normalizer.
+        def firstOf = { v ->
+            if (v == null) return null
+            if (v instanceof List) return v.isEmpty() ? null : v[0]
+            if (v instanceof CharSequence) {
+                def s = v.toString().trim().replaceAll(/^\[|\]$/, '').trim()
+                if (s == '') return null
+                return (s.split(/[,\s]+/) as List).find { it } 
+            }
+            return v
+        }
 
         if (params.do_optimize) {
             log.info "De novo OPTIMIZATION enabled: grid over c1=${params.cutoff1 ?: 'NB'} c2=${params.cutoff2} init_sim=${params.cluster_similarity} final_sim=${params.final_similarity} div_f=${params.div_f} merge_r=${params.merge_r}; r80 SNP subset ${params.snp_sample_pct}%, ${params.n_pseudo_reps} pseudo-replicates"
