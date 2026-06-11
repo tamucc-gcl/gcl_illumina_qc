@@ -596,3 +596,100 @@ passes each — the accepted compute jump), rank_and_select x1.
 - final_rank.tsv: do concordance/r80/snpdens DISCRIMINATE and are they size-orthogonal
   (corr each vs n_contigs ~ 0, unlike the -0.80 coverage failures)? Does winner make
   biological sense vs ~652 anchor? Are concordance & r80 redundant (may prune one)?
+
+---
+
+## PIVOT — grid model + r80-vs-n_contigs ELBOW selector (BUILT, not yet installed/run)
+
+### Why (the conclusion from the 1-pass SNP run)
+The 84-candidate 1-pass run showed EVERY signal is monotone in assembly size:
+corr(n_contigs, concordance)=-0.92, r80=+0.83, snps_per_locus=-0.94; the three SNP
+signals are mutually collinear (|r|0.95-0.98). So genotype signals are NOT size-
+orthogonal either — the premise behind the 1-pass redesign was wrong on real data.
+ROOT CAUSE: the cutoff grid (c1,c2) is a pure STRINGENCY dial — no interior optimum
+exists to find; every quality stat just reads pruning-aggressiveness = size.
+
+WHAT DOES have a turning point: r80 vs n_contigs. r80 rises steeply then PLATEAUS
+(real data: marginal r80/1000-contigs decays 583->146->93->28->18->~0, slightly neg
+at the largest assemblies). STACKS optimizes exactly this (Paris 2017): maximize
+broadly-shared polymorphic loci, pick the plateau. The dDocent analogue = the ELBOW
+of r80(n_contigs). Validated: Kneedle on the r80 upper-envelope -> elbow at ~27,498
+contigs (matches the visual ~25k read off Jason's plot); winner among <=elbow by
+max-r80 then fewest-contigs = c8_k3_s0.95 (27,498 contigs, r80=3403). Interior, not
+an edge. (~42x the 652 anchor, expected for a raw dDocent ref; downstream filters.)
+
+Param research (dDocent docs, ddocent.com): initial CD-HIT similarity is DELIBERATELY
+loose (0.8) and a minor knob — confirmed on data (sweeping it moved outputs ~4% vs
+~25% for one c1 step). The real STACKS-M-analogue tradeoff (collapse paralogs vs split
+alleles) lives in Rainbow div -f / merge -r and the FINAL CD-HIT similarity. So the
+sweep PIVOTS off cutoffs onto those.
+
+### New design
+GRID MODEL: 6 axes, each a SCALAR (fixed) or LIST (swept); grid = Cartesian product.
+  Defaults: cutoff1=null(->NB crossover), cutoff2=3, cluster_similarity(init)=0.8 [all
+  pinned]; final_similarity=[0.90,0.95], div_f=[0.1,0.2,0.5], merge_r=2 [swept defaults].
+  div_K=10 fixed. max_grid_candidates=64 guardrail (warns).
+SELECTION: r80-vs-n_contigs ELBOW. Kneedle on the r80 upper-envelope (param-free), or
+  marginal-slope override via r80_elbow_min_slope (default 30, used only if >0). Winner
+  = among candidates at/below the elbow contig count, MAX r80, ties -> FEWEST contigs.
+  concordance/anchor/NB/snps_per_locus REPORTED but do NOT drive (concordance is
+  size-monotone). Parameter-agnostic: operates on the OUTCOME (size<->r80), so it works
+  no matter which axes were swept.
+SNP sampling: snp_sample_pct default 75% (was 25) — r80 stability scales with samples.
+
+### Files (in /mnt/user-data/outputs)
+EDIT main.nf — replaced floor/ceiling cutoff params with scalar-or-list axis model
+  (cutoff1=null, cutoff2=3, cluster_similarity=0.8, final_similarity=[.90,.95],
+  div_f=[.1,.2,.5], merge_r=2, div_K=10); +max_grid_candidates=64, +r80_elbow_min_slope=30,
+  snp_sample_pct 25->75. Removed duplicate old cutoff block.
+EDIT denovo_assembly.nf — single-assembly (non-optimize) path now coerces any list
+  axis to its first element (firstOf helper) so scalar-or-list params don't break it.
+  Updated optimize log line.
+EDIT optimize_denovo.nf — MAJOR: fit_nb_mixture moved BEFORE grid construction (c1=null
+  resolves to NB value via nb_c1_ch.flatMap). asList() normalizes each axis; full
+  Cartesian product into grid_metas carrying [c1,c2,isim,divf,mr,fsim,id_cutoff,id];
+  grid-size warn. Filter runs ONCE per distinct (c1,c2) (cutoff_pairs.unique{id_cutoff}),
+  re-expanded via combine(by:0) [correct vs join: left has dup keys, right has 1/key].
+  assemble_rainbow_candidate(assemble_in, params.div_K). rank_and_select now takes
+  min_slope arg. finalize echo uses new meta fields.
+EDIT assemble_rainbow_candidate.nf — reads ALL assembly params from meta (isim/divf/mr/
+  fsim); only div_K is a global arg. id now encodes all 6 axes. Stats heredoc updated.
+EDIT compute_cheap_signals.nf + compute_snp_signals.nf — 4th row col (sim) now = meta.fsim
+  (was meta.sim, which no longer exists). Row schemas otherwise unchanged (cheap 7, snp 9).
+REWRITE r_scripts/rank_and_select.R — ELBOW selector. Reads cheap_all(7)+snp_all(9).
+  Builds r80 upper-envelope vs n_contigs, Kneedle elbow (or min_slope override), winner=
+  fewest-contigs at plateau. Emits final_rank.tsv + best_id.value + optimize_plot.png
+  (elbow curve, winner gold-circled) + optimize_params_plot.png (r80 faceted vs each
+  SWEPT param — shows which knob moves r80). r80-absent fallback = fewest contigs.
+EDIT rank_and_select.nf — +min_slope input, +optimize_params_plot.png output.
+
+### Validated (python ports; no R/bioconda in sandbox)
+- elbow Kneedle-on-envelope = 27,498 contigs on real data (matches visual ~25k) ✓
+- winner selection (max-r80<=elbow, tie fewest-contigs) = c8_k3_s0.95, interior ✓
+- all 8 edited files brace/paren/bracket balanced ✓
+- no stale params (floor/ceiling/cv_*/stage2_* gone); all new params defined once ✓
+- combine(by:0) correct for dup-key-left/single-key-right (per NF docs) ✓
+- filter module meta fields (c1,c2,id_cutoff) subset of cutoff_pairs meta ✓
+- column contracts: cheap 7-col, snp 9-col unchanged; R readers match ✓
+
+### To INSTALL then RUN
+Overwrite: main.nf, workflows/denovo_assembly.nf, workflows/optimize_denovo.nf,
+  modules/assemble_rainbow_candidate.nf, modules/compute_cheap_signals.nf,
+  modules/compute_snp_signals.nf, modules/rank_and_select.nf, r_scripts/rank_and_select.R
+Run (NB-pinned c1, c2=3, sweep div_f x final_sim => ~12 candidates default):
+  nextflow run gcl_illumina_qc/main.nf -profile slurm -resume \
+    --reads "data/fq_raw/guttata*.{1,2}.fq.gz" --assembly_mode denovo \
+    --sequencing_type ddrad --decontam_conffile configs/decontam.conf \
+    --outdir "illumina_qc/guttata_denovo" --do_optimize --n_pseudo_reps 6 \
+    --genome_size_est 1.3e9 --size_select_min 150 --size_select_max 221 \
+    --enzyme1_site_len 8 --enzyme2_site_len 6
+NOTE: grid changed (assembly params now in meta.id) => assemble_rainbow_candidate work
+  dirs will NOT cache-hit the old 84-candidate run; expect fresh assemblies. Default
+  grid is only ~12 candidates though (cheaper than the 84-run).
+
+### Inspect after run
+- optimize_plot.png: does r80-vs-contigs show the plateau + is the gold winner at the
+  elbow (not an edge)? optimize_params_plot.png: does div_f actually move r80, or is it
+  inert like initial-sim was? (If div_f is flat, the real lever is elsewhere.)
+- Is the winner's size defensible for downstream genotyping (enough shared loci, not
+  pure junk)? With only ~12 candidates the elbow may be coarse — widen grid if so.

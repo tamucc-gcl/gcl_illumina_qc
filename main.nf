@@ -29,47 +29,50 @@ params.genetic_code = 2  //Mitochondrial genetic code: https://www.ncbi.nlm.nih.
 params.blast_db = "/work/birdlab/databases/midori2_latest/CO1/midori2_latest"  // Path to local BLAST database
 params.taxonomy_db = "/work/birdlab/databases/ncbi_taxonomy" // Path to local NCBI Taxonomy database
 
-// Assembly parameters
-params.cutoff1 = null       // Min reads per individual (null = auto-detect from data)
-params.cutoff2 = null       // Min individuals (null = auto-detect from data)  
-params.cluster_similarity = null // used when do_optimize = false; ignored during optimization
-params.div_f = 0.5
-params.div_K = 10
-params.merge_r = 2
-params.final_similarity = 0.9
+// Assembly parameters — see the GRID MODEL block below. cutoff1/cutoff2/
+// cluster_similarity/final_similarity/div_f/merge_r are all defined there (each
+// accepts a scalar to pin or a list to sweep). div_K is fixed:
+params.div_K = 10        // Rainbow div -K (fixed; not a sweep axis)
 
-// --- De novo cutoff/similarity optimization ---
+// --- De novo OPTIMIZATION (grid sweep + r80-elbow selection) ---
 params.do_optimize = false
 
-// Grid to search. Floors set the low end; CEILINGS set the high end. The grid
-// runs floor..ceiling on each cutoff. Ceilings are EXPLICIT (not the auto-detect
-// knee), so the grid can bracket the NB/quality optimum in its INTERIOR rather
-// than truncating at the knee (which made the NB signal degenerate — it could
-// never favor a c1 above its own value). Set ceilings above where you expect the
-// optimum. Explicit --cutoff1/--cutoff2/--cluster_similarity PIN that dimension.
-params.optimize_cluster_similarity = [0.85, 0.90, 0.95]
-params.cutoff1_floor               = 2        // lowest cutoff1 (per-individual coverage) in the grid
-params.cutoff1_ceiling             = 8        // highest cutoff1 in the grid (was knee-capped at 5; extend so NB optimum is interior)
-params.cutoff2_floor               = 3        // lowest cutoff2 (n individuals); 2 = junk/bloat + slow CD-HIT, skipped by default
-params.cutoff2_ceiling             = 6        // highest cutoff2 in the grid (was knee-capped at 4)
+// GRID MODEL (pivot): six assembly axes, each accepts EITHER a scalar (FIXED) or a
+// list (SWEPT). The candidate grid is the Cartesian product of the resolved axes.
+// Set any axis to a single number to pin it; set it to a list to sweep it.
+//
+// WHY this set: the cutoff axes (c1,c2) are a monotone STRINGENCY dial — every
+// quality signal we tried is monotone in assembly SIZE along them, so they have no
+// interior optimum to "find". The real STACKS-M-analogue tradeoff (collapse
+// paralogs vs. split alleles) lives in the Rainbow div/merge + final CD-HIT step.
+// So by DEFAULT we PIN the cutoffs at principled values and SWEEP the assembly
+// params, then pick the r80-vs-n_contigs ELBOW (diminishing-returns point).
+//
+// cutoff1 default = null  -> resolved at runtime to the NB-mixture crossover
+//   (the coverage where real-locus signal overtakes error; data-driven operating
+//   point). Override with a scalar or a list (e.g. [4,5,6]) to pin/sweep it.
+params.cutoff1            = null            // null => NB crossover; scalar pins; list sweeps
+params.cutoff2            = 3               // low floor: stay in the regime where r80 has an interior shape
+params.cluster_similarity = 0.8            // INITIAL CD-HIT (loose pre-grouping; dDocent intends this low — minor knob)
+params.final_similarity  = [0.90, 0.95]    // FINAL CD-HIT (per-taxon precision merge; the real lever -> swept)
+params.div_f             = [0.1, 0.2, 0.5] // Rainbow div -f (allele-split freq; STACKS-M analogue -> swept)
+params.merge_r           = 2               // Rainbow merge -r (scalar by default; list to sweep)
 
-// Subset used to BUILD candidate references (assembly branch, intact individuals).
-params.snp_sample_pct = 25               // fraction of samples used for STAGE-2 SNP-recovery scoring (NOT assembly; assembly uses all samples)
-params.optimize_seed       = 42               // deterministic pseudo-rep split + stage-2 SNP-sample selection
+// Grid-size guardrail: warn if the Cartesian product exceeds this (each candidate
+// = one full assembly + one SNP-signal pass, so the grid can get expensive fast).
+params.max_grid_candidates = 64
 
-// Pseudo-replicates for the concordance signal (stage 2). The N highest-depth
-// individuals are auto-selected and split 50/50; halves are used ONLY for
-// concordance and never published (the intact individual goes to production).
-params.n_pseudo_reps = 6
+// SNP-signal sampling + r80 selection
+params.snp_sample_pct  = 75              // fraction of samples mapped for the r80/SNP pass (tunable; r80 stability scales with this)
+params.optimize_seed   = 42              // deterministic pseudo-rep split + SNP-sample selection
+params.n_pseudo_reps   = 6               // individuals split 50/50 for the (reported) concordance signal; never published
+params.r80_threshold   = 0.8             // STACKS r80: locus genotyped in >= this fraction of SNP-subset samples
 
-// SNP-signal: r80 share threshold (fraction of SNP-subset samples a locus must be
-// genotyped in to count as an r80 polymorphic locus; STACKS r80 rule, default 0.8)
-params.r80_threshold = 0.8
-
-// Two-stage handoff: cheap signals rank all candidates; the top-N by provisional
-// rank get the expensive bcftools step. N is auto-set by the largest gap in the
-// provisional-rank-score curve, clamped to [min,max] as a compute safety valve.
-// params.stage2_min_candidates / stage2_max_candidates REMOVED in 1-pass design (no gate)
+// r80-elbow selector: the elbow is where marginal r80 gain per added contig drops
+// below this threshold (loci per 1000 added contigs). Below the elbow you are
+// paying contigs (paralogs/junk) for ~no new broadly-shared loci. Smaller =>
+// more permissive (larger reference); larger => more parsimonious (smaller).
+params.r80_elbow_min_slope = 30          // loci gained per 1000 added contigs at the elbow
 
 // --- Optional biological locus-count anchor (signal 2) ---
 // If ALL THREE are supplied, expected RAD locus count is estimated and proximity

@@ -1,8 +1,9 @@
 // modules/assemble_rainbow_candidate.nf
-// Sweep variant of assemble_rainbow. Candidate identity (cutoff1, cutoff2,
-// cluster_similarity) is carried in a meta map; outputs/publishDir keyed by meta.id.
+// Sweep variant of assemble_rainbow. ALL assembly params are carried in the meta
+// map (grid model), so each candidate self-describes; only div_K is a global arg.
 //
-// meta = [c1:<int>, c2:<int>, sim:<dbl>, id:"c<c1>_k<c2>_s<sim>", ...]
+// meta = [c1:<int>, c2:<int>, isim:<dbl>, divf:<dbl>, mr:<int>, fsim:<dbl>,
+//         id_cutoff:"c<c1>_k<c2>", id:"c<c1>_k<c2>_is<isim>_f<divf>_r<mr>_fs<fsim>"]
 
 process assemble_rainbow_candidate {
     label 'denovo_assembly'
@@ -12,10 +13,7 @@ process assemble_rainbow_candidate {
 
     input:
         tuple val(meta), path(uniq_fasta), path(totaluniqseq)
-        val(div_f)
         val(div_K)
-        val(merge_r)
-        val(final_similarity)
 
     output:
         tuple val(meta), path("denovo_reference.fa"), emit: reference
@@ -26,11 +24,11 @@ process assemble_rainbow_candidate {
                     t >= 0.95 ? 10 : t >= 0.90 ? 8 : t >= 0.88 ? 7 :
                     t >= 0.85 ? 6  : t >= 0.80 ? 5 : 4 }
     """
-    echo "Sweep candidate ${meta.id} (cutoff1=${meta.c1}, cutoff2=${meta.c2}, sim=${meta.sim})"
+    echo "Sweep candidate ${meta.id} (cutoff1=${meta.c1}, cutoff2=${meta.c2}, init_sim=${meta.isim}, div_f=${meta.divf}, merge_r=${meta.mr}, final_sim=${meta.fsim})"
 
     sed -e 's/NNNNNNNNNN/\\t/g' ${uniq_fasta} | cut -f1 > uniq.F.fasta
 
-    cd-hit-est -i uniq.F.fasta -o xxx -c ${meta.sim} -n ${cdhit_n(meta.sim)} \
+    cd-hit-est -i uniq.F.fasta -o xxx -c ${meta.isim} -n ${cdhit_n(meta.isim)} \
                -T ${task.cpus} -M 0 -g 1
 
     mawk '{if (\$1 ~ /Cl/) clus = clus + 1; else print \$3 "\\t" clus}' xxx.clstr | \
@@ -39,8 +37,8 @@ process assemble_rainbow_candidate {
     paste sort.contig.cluster.ids ${totaluniqseq} > contig.cluster.totaluniqseq
     sort -k2,2 -g contig.cluster.totaluniqseq | sed -e 's/NNNNNNNNNN/\\t/g' > rcluster
 
-    rainbow div -i rcluster -o rbdiv.out -f ${div_f} -K ${div_K}
-    rainbow merge -o rbasm.out -a -i rbdiv.out -r ${merge_r}
+    rainbow div -i rcluster -o rbdiv.out -f ${meta.divf} -K ${div_K}
+    rainbow merge -o rbasm.out -a -i rbdiv.out -r ${meta.mr}
 
     cat rbasm.out <(echo "E") | sed 's/[0-9]*:[0-9]*://g' | mawk '
     {
@@ -65,7 +63,7 @@ process assemble_rainbow_candidate {
     }' > rainbow.fasta
 
     cd-hit-est -i rainbow.fasta -o denovo_reference.fa -M 0 -T ${task.cpus} \
-               -c ${final_similarity} -n ${cdhit_n(final_similarity)}
+               -c ${meta.fsim} -n ${cdhit_n(meta.fsim)}
 
     cat > assembly_stats.txt <<EOF
 Rainbow Assembly Statistics (sweep candidate ${meta.id})
@@ -73,11 +71,11 @@ Rainbow Assembly Statistics (sweep candidate ${meta.id})
 Assembly Parameters:
   cutoff1 (min reads/individual): ${meta.c1}
   cutoff2 (min individuals): ${meta.c2}
-  Initial clustering: ${meta.sim}
-  Rainbow div -f: ${div_f}
+  Initial clustering: ${meta.isim}
+  Rainbow div -f: ${meta.divf}
   Rainbow div -K: ${div_K}
-  Rainbow merge -r: ${merge_r}
-  Final clustering: ${final_similarity}
+  Rainbow merge -r: ${meta.mr}
+  Final clustering: ${meta.fsim}
 
 Input sequences: \$(grep -c '^>' ${uniq_fasta})
 Final reference contigs: \$(grep -c '^>' denovo_reference.fa)

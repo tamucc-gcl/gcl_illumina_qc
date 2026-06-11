@@ -18,8 +18,12 @@ workflow denovo_assembly {
         cleaned_reads
 
     main:
+        // Axes can now be scalars OR lists (grid model). The single-assembly path
+        // needs ONE value per axis, so coerce: list -> first element, scalar -> itself.
+        def firstOf = { v -> (v instanceof List) ? (v.isEmpty() ? null : v[0]) : v }
+
         if (params.do_optimize) {
-            log.info "De novo OPTIMIZATION enabled: grid c1 ${params.cutoff1_floor}..knee x c2 ${params.cutoff2_floor}..knee x cluster_similarity ${params.optimize_cluster_similarity}; SNP-scoring subset ${params.snp_sample_pct}%, ${params.n_pseudo_reps} pseudo-replicates"
+            log.info "De novo OPTIMIZATION enabled: grid over c1=${params.cutoff1 ?: 'NB'} c2=${params.cutoff2} init_sim=${params.cluster_similarity} final_sim=${params.final_similarity} div_f=${params.div_f} merge_r=${params.merge_r}; r80 SNP subset ${params.snp_sample_pct}%, ${params.n_pseudo_reps} pseudo-replicates"
 
             optimize_denovo( cleaned_reads )
 
@@ -33,7 +37,7 @@ workflow denovo_assembly {
             filter_stats_ch     = Channel.empty()   // no single filter step in optimize mode
 
         } else {
-            // ---- Single run: resolved cutoffs at params.cluster_similarity ----
+            // ---- Single run: ONE value per axis (first element if a list) ----
             extract_unique_seqs( cleaned_reads )
             all_uniq_seqs = extract_unique_seqs.out.uniq_seqs
                 .map{ sid, f -> f }
@@ -41,11 +45,18 @@ workflow denovo_assembly {
 
             assembly_diagnostics( all_uniq_seqs )
 
-            cutoff1_ch = (params.cutoff1 != null)
-                ? Channel.value( params.cutoff1 as int )
+            def c1_fixed   = firstOf(params.cutoff1)
+            def c2_fixed   = firstOf(params.cutoff2)
+            def isim_fixed = firstOf(params.cluster_similarity)
+            def divf_fixed = firstOf(params.div_f)
+            def mr_fixed   = firstOf(params.merge_r)
+            def fsim_fixed = firstOf(params.final_similarity)
+
+            cutoff1_ch = (c1_fixed != null)
+                ? Channel.value( c1_fixed as int )
                 : assembly_diagnostics.out.cutoff1_value.map{ f -> f.text.trim() as int }
-            cutoff2_ch = (params.cutoff2 != null)
-                ? Channel.value( params.cutoff2 as int )
+            cutoff2_ch = (c2_fixed != null)
+                ? Channel.value( c2_fixed as int )
                 : assembly_diagnostics.out.cutoff2_value.map{ f -> f.text.trim() as int }
 
             filter_unique_seqs( all_uniq_seqs, cutoff1_ch, cutoff2_ch )
@@ -53,8 +64,8 @@ workflow denovo_assembly {
             assemble_rainbow(
                 filter_unique_seqs.out.filtered_fasta,
                 filter_unique_seqs.out.totaluniqseq,
-                params.cluster_similarity,
-                params.div_f, params.div_K, params.merge_r, params.final_similarity
+                isim_fixed,
+                divf_fixed, params.div_K, mr_fixed, fsim_fixed
             )
 
             reference_ch        = assemble_rainbow.out.reference

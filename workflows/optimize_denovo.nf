@@ -66,7 +66,7 @@ process stub_finalize_reference {
         path("assembly_stats.txt"),  emit: stats
     script:
     """
-    echo "Selected winning de novo reference: ${meta.id} (cutoff1=${meta.c1} cutoff2=${meta.c2} sim=${meta.sim})"
+    echo "Selected winning de novo reference: ${meta.id} (cutoff1=${meta.c1} cutoff2=${meta.c2} init_sim=${meta.isim} div_f=${meta.divf} merge_r=${meta.mr} final_sim=${meta.fsim})"
     # Winner is already a full-sample assembly — stage it under the canonical name.
     cp winner_input.fa denovo_reference.fa
     echo "Final reference contigs: \$(grep -c '^>' denovo_reference.fa)" > assembly_stats.txt
@@ -95,98 +95,108 @@ workflow optimize_denovo {
             .map{ sid, f -> f }
             .collect()
 
-        // Diagnostics: knee values (grid CEILINGS) + curves + NB-mixture (5b later)
+        // Diagnostics: knee curves (report) + coverage_freq for the NB fit
         assembly_diagnostics( all_uniq_seqs )
 
-        // ----- Build the (c1,c2,sim) grid from floor..knee (or pinned params) -----
-        // Knee values are read from diagnostics .value files and act as CEILINGS.
-        // Explicit --cutoff1/--cutoff2 PIN that dimension to a single value.
-        // Independent floors: cutoff1_floor (per-individual coverage) and
-        // cutoff2_floor (n individuals). cutoff2_floor defaults to 3 — the k2 corner
-        // is biologically junky AND the slowest to assemble (CD-HIT cost).
-        // Grid is floor..ceiling on each cutoff (EXPLICIT ceilings — NOT the
-        // auto-detect knee, which capped c1 at 5 / c2 at 4 and made the NB signal
-        // degenerate by truncating the grid at the NB value itself). Extending the
-        // ceiling above the expected optimum lets NB/quality signals bracket it in
-        // the interior. The diagnostics knee is still computed (for the report and
-        // as the NB fallback) but no longer bounds the optimization grid.
-        def c1_floor   = (params.cutoff1_floor ?: 2) as int
-        def c2_floor   = (params.cutoff2_floor ?: 3) as int
-        def c1_ceiling = (params.cutoff1_ceiling ?: 8) as int
-        def c2_ceiling = (params.cutoff2_ceiling ?: 6) as int
-
-        c1_vals = (params.cutoff1 != null)
-            ? Channel.value( [ params.cutoff1 as int ] )
-            : Channel.value( (c1_floor..Math.max(c1_floor, c1_ceiling)).toList() )
-        c2_vals = (params.cutoff2 != null)
-            ? Channel.value( [ params.cutoff2 as int ] )
-            : Channel.value( (c2_floor..Math.max(c2_floor, c2_ceiling)).toList() )
-
-        // Cutoff combos = c1 x c2 (filtering is similarity-INDEPENDENT, so filter
-        // runs ONCE per (c1,c2) and is later crossed with similarities).
-        // Wrap each list with .map{ [it] } so combine keeps it as ONE slot rather
-        // than spreading the list elements across tuple positions.
-        cutoff_combos = c1_vals.map{ [it] }
-            .combine( c2_vals.map{ [it] } )
-            .flatMap { c1list, c2list ->
-                def out = []
-                for (c1 in c1list) for (c2 in c2list) {
-                    out << [ c1: c1 as int, c2: c2 as int, id_cutoff: "c${c1}_k${c2}".toString() ]
-                }
-                out
-            }
-
-        // Pair each cutoff meta with the collected uniq.seqs (wrap list -> one slot)
-        filter_in = cutoff_combos
-            .combine( all_uniq_seqs.map{ [it] } )
-            .map { meta, files -> tuple(meta, files) }
-
-        filter_unique_seqs_candidate( filter_in )
-
-        // Cross each filtered (c1,c2) result with the similarity grid -> full candidate set.
-        sims = Channel.fromList( params.optimize_cluster_similarity )
-
-        assemble_in = filter_unique_seqs_candidate.out.filtered
-            .combine( sims )
-            .map { meta, uniq_fasta, totaluniqseq, fstats, sim ->
-                def m = meta + [ sim: sim, id: "${meta.id_cutoff}_s${sim}".toString() ]
-                tuple(m, uniq_fasta, totaluniqseq)
-            }
-
-        assemble_rainbow_candidate(
-            assemble_in,
-            params.div_f, params.div_K, params.merge_r, params.final_similarity
-        )
-
-        candidates = assemble_rainbow_candidate.out.reference   // tuple(meta, denovo_reference.fa)
-
-        // ----- STAGE 1: CHEAP signals per candidate -> provisional rank -----
-        // Signal set (chunk 3c):
-        //   NB cutoff1 (5b)         : ranks the c1 axis (coverage-cutoff authority)
-        //   coverage CV + Gini (2)  : rank assembly QUALITY along c2/similarity
-        //   anchor (2, optional)    : ranks contig count vs expected RAD loci
-        //   inflection (1a)         : computed but REPORT-ONLY (excluded from agg;
-        //                             it duplicates NB on the c1 axis)
-        // Dropped: redundancy (inherently ~0 for CD-HIT'd refs), paired-locus
-        // fraction (all contigs paired by construction), length-dist (read-length
-        // governed -> flat). See BUILD_STATUS chunk 3c rationale.
-
-        // contig stats for inflection (report) + n_contigs for anchor
-        compute_cheap_signals( candidates )
-        cheap_rows = compute_cheap_signals.out.cheap_row.collect()
-
-        // (5b) coverage-uniformity signal REMOVED — every coverage statistic we
-        // tried (idxstats CV/Gini, per-base frac_hi/Gini/CV) stayed correlated with
-        // assembly size on real data (frac_hi corr n_contigs = -0.80), i.e. it read
-        // pruning-aggressiveness not an independent quality axis. The genotype
-        // signals (concordance + r80) ARE size-orthogonal, so they carry quality now.
-
-        // 5b: global NB-mixture cutoff1 from the pooled coverage distribution
-        // (assembly_diagnostics now emits coverage_freq.txt; knee value is fallback).
+        // NB-mixture cutoff1 must be computed BEFORE grid construction, because the
+        // cutoff1 axis defaults to the NB crossover (params.cutoff1 == null). Knee
+        // value is the graceful fallback inside fit_nb_mixture.
         fit_nb_mixture(
             assembly_diagnostics.out.coverage_freq,
             assembly_diagnostics.out.cutoff1_value
         )
+        // nb value as an int channel (single value, broadcast)
+        nb_c1_ch = fit_nb_mixture.out.nb_cutoff1.map { f -> f.text.trim() as int }
+
+        // ===== GRID MODEL =====================================================
+        // Six axes, each a SCALAR (fixed) or a LIST (swept). Normalize each to a
+        // list; the candidate grid is the Cartesian product. The cutoff axes are a
+        // monotone stringency dial (no interior optimum), so by default they are
+        // PINNED (c1=NB crossover, c2=3) and the assembly axes (final_sim, div_f,
+        // optionally merge_r/init_sim) are SWEPT — that is where the STACKS-M-style
+        // collapse-vs-split tradeoff lives. Selection uses the r80-vs-n_contigs
+        // ELBOW (diminishing returns), not any single input axis, so this works
+        // regardless of which axes the user chose to sweep.
+        def asList = { v -> (v == null) ? [null] : ((v instanceof List) ? v : [v]) }
+
+        // c1: null sentinel means "use the NB crossover" (resolved per-value below).
+        def c1_axis   = asList(params.cutoff1)
+        def c2_axis   = asList(params.cutoff2).collect { it as int }
+        def isim_axis = asList(params.cluster_similarity).collect { it as double }
+        def fsim_axis = asList(params.final_similarity).collect { it as double }
+        def divf_axis = asList(params.div_f).collect { it as double }
+        def mr_axis   = asList(params.merge_r).collect { it as int }
+
+        // Resolve the c1 axis against the runtime NB value, then build the full grid.
+        // We carry the whole axis spec into a flatMap over the NB value so c1=null
+        // becomes the NB integer; explicit scalars/lists pass through unchanged.
+        grid_metas = nb_c1_ch.flatMap { nb ->
+            def c1_resolved = c1_axis.collect { it == null ? nb : (it as int) }.unique()
+            def combos = []
+            for (c1 in c1_resolved)
+              for (c2 in c2_axis)
+                for (isim in isim_axis)
+                  for (divf in divf_axis)
+                    for (mr in mr_axis)
+                      for (fsim in fsim_axis) {
+                        def id = "c${c1}_k${c2}_is${isim}_f${divf}_r${mr}_fs${fsim}".toString()
+                        combos << [ c1:c1, c2:c2, isim:isim, divf:divf, mr:mr, fsim:fsim,
+                                    id_cutoff:"c${c1}_k${c2}".toString(), id:id ]
+                      }
+            // Grid-size guardrail
+            int gmax = (params.max_grid_candidates ?: 64) as int
+            if (combos.size() > gmax)
+                log.warn "De novo grid = ${combos.size()} candidates (> max_grid_candidates=${gmax}). Each candidate is a full assembly + SNP pass; this may be very expensive. Pin more axes to scalars to shrink the grid."
+            else
+                log.info "De novo grid = ${combos.size()} candidates (c1=${c1_resolved} c2=${c2_axis} init_sim=${isim_axis} div_f=${divf_axis} merge_r=${mr_axis} final_sim=${fsim_axis})"
+            combos
+        }
+
+        // ----- FILTER: depends only on (c1,c2); run ONCE per distinct cutoff pair -----
+        // Collapse the grid to its distinct (c1,c2) pairs for filtering, then
+        // re-expand by joining each filtered result back to every full meta that
+        // shares its (c1,c2). id_cutoff is the join key.
+        cutoff_pairs = grid_metas
+            .map { m -> tuple(m.id_cutoff, [c1:m.c1, c2:m.c2]) }
+            .unique { it[0] }
+
+        filter_in = cutoff_pairs
+            .combine( all_uniq_seqs.map{ [it] } )
+            .map { idc, cm, files -> tuple(cm + [id_cutoff: idc], files) }
+
+        filter_unique_seqs_candidate( filter_in )
+
+        // Join filtered (c1,c2) outputs back to the full grid metas by id_cutoff.
+        filtered_by_cutoff = filter_unique_seqs_candidate.out.filtered
+            .map { meta, uniq_fasta, totaluniqseq, fstats ->
+                tuple(meta.id_cutoff, uniq_fasta, totaluniqseq)
+            }
+
+        // Re-expand: each full grid meta joins to its (c1,c2)'s single filtered
+        // result. combine(by:0) is the RIGHT operator here (NOT join): the left
+        // side has DUPLICATE id_cutoff keys (many metas share a cutoff pair), which
+        // join does not support, while the right side has exactly ONE item per key.
+        // combine(by:0) does the within-key product = each meta x its 1 filtered row.
+        // Ordering non-determinism is harmless: 1 right item per key means each meta
+        // gets exactly its filtered fasta, and candidates are keyed by meta.id after.
+        assemble_in = grid_metas
+            .map { m -> tuple(m.id_cutoff, m) }
+            .combine( filtered_by_cutoff, by: 0 )
+            .map { idc, m, uniq_fasta, totaluniqseq -> tuple(m, uniq_fasta, totaluniqseq) }
+
+        // assemble_rainbow_candidate now reads ALL assembly params from meta
+        // (init_sim, div_f, merge_r, final_sim); only div_K stays a global param.
+        assemble_rainbow_candidate( assemble_in, params.div_K )
+
+        candidates = assemble_rainbow_candidate.out.reference   // tuple(meta, denovo_reference.fa)
+
+        // ----- contig stats per candidate (n_contigs for the r80-vs-size curve + anchor) -----
+        compute_cheap_signals( candidates )
+        cheap_rows = compute_cheap_signals.out.cheap_row.collect()
+
+        // (5b) coverage-uniformity signal REMOVED — every coverage statistic tried
+        // stayed correlated with assembly size on real data. Selection is now the
+        // r80-vs-n_contigs elbow (see rank_and_select.R).
 
         // 2 anchor: expected ddRAD locus count. The CALCULATION now lives entirely
         // in write_anchor_calc (awk), which is the single source of truth and emits
@@ -233,7 +243,9 @@ workflow optimize_denovo {
 
         // ----- SNP-subset: seeded snp_sample_pct of samples for r80 + density -----
         // sorted-before-take for cache stability; overlap with pseudo-reps is fine.
-        def snp_pct = (params.snp_sample_pct ?: 25) as int
+        // Default 75% — r80 stability scales with sample count (the 80%-shared set
+        // is better estimated with more samples).
+        def snp_pct = (params.snp_sample_pct ?: 75) as int
         snp_subset_reads = cleaned_reads
             .toList()
             .flatMap { rows ->
@@ -245,8 +257,8 @@ workflow optimize_denovo {
             .collect()
 
         // ----- 1-PASS SNP SIGNALS on ALL candidates (no gate) -----
-        // Each candidate gets the pseudo-rep bag (PASS A concordance) + the snp
-        // subset bag (PASS B r80/density). Wrap each collected bag as one slot.
+        // Each candidate gets the pseudo-rep bag (PASS A concordance, REPORTED) + the
+        // snp subset bag (PASS B r80/density). Wrap each collected bag as one slot.
         snp_in = candidates
             .combine( pseudo_fastqs.map{ [it] } )
             .combine( snp_subset_reads.map{ [it] } )
@@ -255,11 +267,20 @@ workflow optimize_denovo {
         compute_snp_signals( snp_in, (params.r80_threshold ?: 0.8) )
         snp_rows = compute_snp_signals.out.snp_row.collect()
 
-        // ----- SINGLE rank aggregation (no provisional/final split) -----
-        // Signals: NB cutoff1 proximity + anchor proximity + concordance (primary)
-        // + r80 loci + SNPs-per-locus. Inflection report-only. Emits final_rank.tsv
-        // + best_id.value (the winner). Weight-free rank aggregation.
-        rank_and_select( cheap_rows, snp_rows, fit_nb_mixture.out.nb_cutoff1, expected_loci_ch )
+        // ----- SELECT via r80-vs-n_contigs ELBOW -----
+        // PRIMARY selection = elbow of the r80(n_contigs) curve: the smallest
+        // assembly past which marginal r80 gain per added contig falls below
+        // r80_elbow_min_slope (diminishing returns -> only junk/paralogs added).
+        // This is parameter-agnostic (works for any swept axes). concordance/anchor/
+        // NB are REPORTED for context but do NOT drive selection (concordance is
+        // size-monotone; the elbow on r80 is the real, size-aware optimum).
+        rank_and_select(
+            cheap_rows,
+            snp_rows,
+            fit_nb_mixture.out.nb_cutoff1,
+            expected_loci_ch,
+            (params.r80_elbow_min_slope ?: 30)
+        )
 
         // ----- FINALIZE: select winning candidate as the production reference -----
         best_id_ch = rank_and_select.out.best_id.map { f -> f.text.trim() }

@@ -28,7 +28,7 @@ process compute_cheap_signals {
     read TOTAL_LEN MEAN_LEN <<< \$(awk '/^>/{next} {l+=length(\$0); n++} END{ if(n>0) printf "%d %d", l, l/n; else printf "0 0" }' ${reference})
 
     printf "%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" \\
-        "${meta.id}" "${meta.c1}" "${meta.c2}" "${meta.sim}" \\
+        "${meta.id}" "${meta.c1}" "${meta.c2}" "${meta.fsim}" \\
         "\$N_CONTIGS" "\$TOTAL_LEN" "\$MEAN_LEN" > cheap_${meta.id}.tsv
 
     echo "[cheap_signals ${meta.id}] contigs=\$N_CONTIGS total=\$TOTAL_LEN mean=\$MEAN_LEN"

@@ -138,7 +138,7 @@ process compute_snp_signals {
     fi
 
     printf "%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" \\
-        "${meta.id}" "${meta.c1}" "${meta.c2}" "${meta.sim}" \\
+        "${meta.id}" "${meta.c1}" "${meta.c2}" "${meta.fsim}" \\
         "\$CONCORDANCE" "\$R80_LOCI" "\$SNPS_PER_LOCUS" "\$N_SNPS" "\$N_CONTIGS" \\
         > snp_${meta.id}.tsv
 
