@@ -140,6 +140,53 @@ workflow {
         .set { raw_reads_pairs }
 
     //----------------------------------------------------------------
+    // 1a. PRE-FLIGHT SUMMARY — print resolved inputs BEFORE heavy work submits,
+    //     so a mis-parsed --reads glob or an oversized/mis-parsed grid is caught
+    //     at launch rather than after dozens of assemblies are queued.
+    //----------------------------------------------------------------
+    // Count matched read FILES at parse time via a Groovy glob (does NOT touch/
+    // consume raw_reads_pairs — a queue channel can only be consumed once, and the
+    // pipeline needs it downstream). files() ALWAYS returns a list (file() does not
+    // for a single match), so the count is robust. Pairs ~= files / 2.
+    def pf_nfiles = files(params.reads).size()
+    log.info "PRE-FLIGHT | --reads '${params.reads}' matched ${pf_nfiles} file(s) (~${(pf_nfiles/2) as int} sample pair(s))"
+    if (pf_nfiles == 0)
+        log.warn "PRE-FLIGHT | NO files matched --reads. Check the glob (needs a sample-ID wildcard + paired {F,R} or {1,2}), e.g. 'data/fq_raw/*.{F,R}.fq.gz'"
+    else if (pf_nfiles % 2 != 0)
+        log.warn "PRE-FLIGHT | --reads matched an ODD number of files (${pf_nfiles}); paired-end expects an even count. Check for an unpaired/stray file."
+
+    if (params.do_optimize) {
+        // Mirror optimize_denovo's axis normalizer to report the resolved grid up front.
+        def pfList = { v ->
+            if (v == null) return [null]
+            if (v instanceof List) return v
+            if (v instanceof CharSequence) {
+                def s = v.toString().trim().replaceAll(/^\[|\]$/, '').trim()
+                if (s == '') return [null]
+                if (s.contains(',') || s.contains(' '))
+                    return s.split(/[,\s]+/).findAll { it }.collect { it.trim() }
+                return [s]
+            }
+            return [v]
+        }
+        def pf_c1   = pfList(params.cutoff1)
+        def pf_c2   = pfList(params.cutoff2)
+        def pf_isim = pfList(params.cluster_similarity)
+        def pf_fsim = pfList(params.final_similarity)
+        def pf_divf = pfList(params.div_f)
+        def pf_mr   = pfList(params.merge_r)
+        // c1=null contributes the (runtime) NB value = 1 value for counting purposes.
+        def c1_n = pf_c1.collect { it == null ? 'NB' : it }.unique().size()
+        def n_grid = c1_n * pf_c2.size() * pf_isim.size() * pf_fsim.size() * pf_divf.size() * pf_mr.size()
+        def gmax = (params.max_grid_candidates ?: 100) as int
+        log.info "PRE-FLIGHT | OPTIMIZE grid axes: cutoff1=${pf_c1} cutoff2=${pf_c2} init_sim=${pf_isim} final_sim=${pf_fsim} div_f=${pf_divf} merge_r=${pf_mr}"
+        log.info "PRE-FLIGHT | grid = ${n_grid} candidate(s) (each = 1 assembly + 1 SNP pass); guardrail max_grid_candidates=${gmax}"
+        if (n_grid > gmax)
+            log.warn "PRE-FLIGHT | grid (${n_grid}) EXCEEDS max_grid_candidates (${gmax}) — pin axes to scalars or raise the guardrail."
+        log.info "PRE-FLIGHT | SNP/r80 pass maps ${params.snp_sample_pct}% of samples per candidate (anchor: ${ (params.genome_size_est && params.size_select_min && params.size_select_max) ? 'ENABLED' : 'disabled' })"
+    }
+
+    //----------------------------------------------------------------
     // 2. FASTQC ON RAW READS  ➜  MULTIQC (raw_fastqc)
     //----------------------------------------------------------------
     fastqc_raw( raw_reads_pairs )

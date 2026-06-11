@@ -117,7 +117,23 @@ workflow optimize_denovo {
         // collapse-vs-split tradeoff lives. Selection uses the r80-vs-n_contigs
         // ELBOW (diminishing returns), not any single input axis, so this works
         // regardless of which axes the user chose to sweep.
-        def asList = { v -> (v == null) ? [null] : ((v instanceof List) ? v : [v]) }
+        // Normalize an axis to a list. Accepts: a real Groovy list (from a config
+        // or -params-file), a scalar number, or a STRING from the CLI. Nextflow does
+        // NOT parse "--cutoff1 [3,5,7]" into a list — it arrives as the string
+        // "[3,5,7]". So we also split comma/bracket/space strings here, making
+        // --cutoff1 "3,5,7", --cutoff1 "[3,5,7]", and --cutoff1 5 all work.
+        def asList = { v ->
+            if (v == null) return [null]
+            if (v instanceof List) return v
+            if (v instanceof CharSequence) {
+                def s = v.toString().trim().replaceAll(/^\[|\]$/, '').trim()
+                if (s == '') return [null]
+                if (s.contains(',') || s.contains(' '))
+                    return s.split(/[,\s]+/).findAll { it }.collect { it.trim() }
+                return [s]   // single value as string; coerced below
+            }
+            return [v]
+        }
 
         // c1: null sentinel means "use the NB crossover" (resolved per-value below).
         def c1_axis   = asList(params.cutoff1)
