@@ -48,20 +48,31 @@ fit_plot <- function(freq_df, mu1, th1, mu2, th2, p1, cutoff) {
     tibble(cov = xs, count = comp1, component = sprintf("error (mu=%.1f)", mu1)),
     tibble(cov = xs, count = comp2, component = sprintf("locus (mu=%.1f)", mu2))
   )
+  # On a log y-axis, values < 1 (incl. component densities in the tail and the
+  # implicit 0 baseline of geom_col) go negative/-Inf and render as a degenerate
+  # axis (the "1 0 0 0" labels) or vanish. Floor everything at 1 and use explicit
+  # log breaks with log-aware labels so the spike AND the components are visible.
+  freq_plot <- freq_df %>% mutate(n = pmax(n, 1))
+  dens <- dens %>% filter(is.finite(count)) %>% mutate(count = pmax(count, 1))
+  ymax <- max(freq_plot$n, dens$count, na.rm = TRUE)
+
   p <- ggplot() +
-    geom_col(data = freq_df, aes(cov, n), fill = "grey80", color = NA, width = 1) +
+    geom_col(data = freq_plot, aes(cov, n), fill = "grey80", color = NA, width = 1) +
     geom_line(data = dens, aes(cov, count, color = component), linewidth = 1) +
     geom_vline(xintercept = cutoff, color = "red", linetype = "dashed", linewidth = 0.9) +
-    annotate("text", x = cutoff, y = max(freq_df$n),
+    annotate("text", x = cutoff, y = ymax,
              label = paste0("  cutoff1 = ", cutoff), color = "red", hjust = 0, vjust = 1) +
     scale_color_manual(values = c("steelblue", "darkorange"), name = NULL) +
-    scale_y_continuous(labels = scales::comma_format(),
-                      transform = scales::log10_trans()) +
-    coord_cartesian(xlim = c(0, min(max(freq_df$cov), 60))) +
+    scale_y_log10(
+      breaks = scales::trans_breaks("log10", function(x) 10^x),
+      labels = scales::trans_format("log10", scales::math_format(10^.x))
+    ) +
+    annotation_logticks(sides = "l") +
+    coord_cartesian(xlim = c(0, min(max(freq_df$cov), 60)), ylim = c(1, ymax)) +
     labs(title = "NB-mixture fit on within-individual coverage",
-         subtitle = "Grey = observed; lines = fitted NB components; red = posterior crossover (cutoff1)",
+         subtitle = "Grey = observed (log scale); lines = fitted NB components; red = posterior crossover (cutoff1)",
          x = "Within-individual coverage (reads per unique sequence)",
-         y = "Number of unique sequences") +
+         y = "Number of unique sequences (log scale)") +
     theme_classic() +
     theme(plot.title = element_text(face = "bold", size = 13),
           legend.position = "top")

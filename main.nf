@@ -48,19 +48,25 @@ params.do_optimize = false
 // So by DEFAULT we PIN the cutoffs at principled values and SWEEP the assembly
 // params, then pick the r80-vs-n_contigs ELBOW (diminishing-returns point).
 //
-// cutoff1 default = null  -> resolved at runtime to the NB-mixture crossover
-//   (the coverage where real-locus signal overtakes error; data-driven operating
-//   point). Override with a scalar or a list (e.g. [4,5,6]) to pin/sweep it.
-params.cutoff1            = null            // null => NB crossover; scalar pins; list sweeps
-params.cutoff2            = 3               // low floor: stay in the regime where r80 has an interior shape
-params.cluster_similarity = 0.8            // INITIAL CD-HIT (loose pre-grouping; dDocent intends this low — minor knob)
-params.final_similarity  = [0.90, 0.95]    // FINAL CD-HIT (per-taxon precision merge; the real lever -> swept)
-params.div_f             = [0.1, 0.2, 0.5] // Rainbow div -f (allele-split freq; STACKS-M analogue -> swept)
-params.merge_r           = 2               // Rainbow merge -r (scalar by default; list to sweep)
+// cutoff1 default = a wide SWEPT band. The cutoffs are the axes that move assembly
+//   SIZE the most, so sweeping them is how the grid SPANS the r80-vs-size plateau
+//   (a narrow/pinned grid gave only a ~4% size range with no interior elbow). The
+//   r80 elbow is still the SELECTOR; the cutoff sweep just generates the curve it
+//   needs. Pin to a scalar (e.g. --cutoff1 5) to fix it; null => include the NB
+//   crossover value in the swept set as well.
+// NOTE: any axis set to a SCALAR is pinned (not swept). Lists are swept.
+params.cutoff1            = [2, 3, 4, 5, 6, 7, 8]   // SWEPT wide (size span); scalar pins; null adds NB value
+params.cutoff2            = [3, 4]                  // SWEPT low band (keeps the r80-interesting regime)
+params.cluster_similarity = 0.8                     // INITIAL CD-HIT (loose pre-grouping; pinned — minor knob)
+params.final_similarity  = [0.90, 0.95]            // FINAL CD-HIT (per-taxon precision merge -> swept)
+params.div_f             = [0.1, 0.2, 0.5]         // Rainbow div -f (allele-split freq -> swept)
+params.merge_r           = 2                        // Rainbow merge -r (pinned; list to sweep)
 
-// Grid-size guardrail: warn if the Cartesian product exceeds this (each candidate
-// = one full assembly + one SNP-signal pass, so the grid can get expensive fast).
-params.max_grid_candidates = 64
+// Grid-size guardrail: warn if the Cartesian product exceeds this. The DEFAULT grid
+// (c1[2..8] x c2[3,4] x div_f[.1,.2,.5] x final_sim[.90,.95]) = 84 candidates; each
+// is one full assembly + one SNP pass, so this is the expensive case BY DESIGN (it
+// spans the size range the r80 elbow needs). Pin axes to scalars to shrink it.
+params.max_grid_candidates = 100
 
 // SNP-signal sampling + r80 selection
 params.snp_sample_pct  = 75              // fraction of samples mapped for the r80/SNP pass (tunable; r80 stability scales with this)

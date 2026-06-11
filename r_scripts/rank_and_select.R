@@ -42,18 +42,20 @@ min_slope  <- suppressWarnings(as.numeric(args[5])); if (is.na(min_slope)) min_s
 nb_cut <- tryCatch(as.numeric(readLines(nb_file)[1]), error = function(e) NA_real_)
 
 cheap <- read_tsv(cheap_file,
-            col_names = c("id","c1","c2","sim","n_contigs","total_len","mean_len"),
-            col_types = "ciidiii")
+            col_names = c("id","c1","c2","isim","divf","mr","fsim",
+                          "n_contigs","total_len","mean_len"),
+            col_types = "ciiddidiii")
 
 snp <- tryCatch(
   read_tsv(snp_file,
-    col_names = c("id","c1","c2","sim","concordance","r80_loci","snps_per_locus","n_snps","n_called_contigs"),
-    col_types = "ciidddddi", na = c("NA","")),
+    col_names = c("id","c1","c2","isim","divf","mr","fsim",
+                  "concordance","r80_loci","snps_per_locus","n_snps","n_called_contigs"),
+    col_types = "ciiddidddddi", na = c("NA","")),
   error = function(e) NULL
 )
 
 empty_out <- function() {
-  writeLines("id\tc1\tc2\tsim\tn_contigs\tconcordance\tr80_loci\tsnps_per_locus\tis_winner",
+  writeLines("id\tc1\tc2\tisim\tdivf\tmr\tfsim\tn_contigs\tconcordance\tr80_loci\tsnps_per_locus\tis_winner",
              "final_rank.tsv")
   writeLines("NA", "best_id.value")
   png("optimize_plot.png", width=700, height=500); plot.new(); text(.5,.5,"no candidates"); dev.off()
@@ -117,54 +119,85 @@ writeLines(as.character(best_id), "best_id.value")
 
 write_tsv(
   d %>% arrange(n_contigs) %>%
-    select(id, c1, c2, sim, n_contigs, concordance, r80_loci, snps_per_locus, is_winner),
+    select(id, c1, c2, isim, divf, mr, fsim, n_contigs,
+           concordance, r80_loci, snps_per_locus, is_winner),
   "final_rank.tsv"
 )
 
 # ---------------- PLOT 1: the r80-vs-n_contigs elbow ----------------
+# Encode the swept-parameter combination on each point. Identify which axes vary;
+# map the (up to two) most-varied non-cutoff axes to color + shape so the user can
+# see which parameter combo sits where on the size<->r80 curve. Falls back to a
+# single color when the grid is large (too many combos to distinguish).
 tryCatch({
   elbow_nc <- attr(best_id, "elbow_nc")
   wr <- d %>% filter(is_winner)
-  p1 <- ggplot(d, aes(n_contigs, r80_loci)) +
-    geom_point(aes(color = factor(c2)), size = 2.4, alpha = 0.85) +
-    { if ("r80_envelope" %in% names(d)) geom_line(aes(y = r80_envelope), color = "grey50", linewidth = 0.4) else NULL } +
-    { if (is.finite(elbow_nc)) geom_vline(xintercept = elbow_nc, linetype = "dashed", color = "red") else NULL } +
-    geom_point(data = wr, color = "black", shape = 21, fill = "gold", size = 4, stroke = 1.1) +
+
+  axis_cols <- c("c1","c2","isim","divf","mr","fsim")
+  varied <- axis_cols[ sapply(axis_cols, function(c) dplyr::n_distinct(d[[c]]) > 1) ]
+
+  # choose a color axis and a shape axis from the varied ones (prefer divf/fsim for
+  # color since cutoffs already drive the x-axis/size); keep it legible.
+  pick <- function(prefer, pool) { p <- intersect(prefer, pool); if (length(p)) p[1] else if (length(pool)) pool[1] else NA }
+  color_axis <- pick(c("divf","fsim","isim","mr"), varied)
+  shape_axis <- pick(c("fsim","c2","c1","mr"), setdiff(varied, color_axis))
+
+  too_many <- nrow(d) > 40   # if huge grid, don't overload aesthetics
+  p1 <- ggplot(d, aes(n_contigs, r80_loci))
+  if ("r80_envelope" %in% names(d))
+    p1 <- p1 + geom_line(aes(y = r80_envelope), color = "grey60", linewidth = 0.4)
+  if (is.finite(elbow_nc))
+    p1 <- p1 + geom_vline(xintercept = elbow_nc, linetype = "dashed", color = "red")
+
+  if (!too_many && !is.na(color_axis) && !is.na(shape_axis)) {
+    p1 <- p1 + geom_point(aes(color = factor(.data[[color_axis]]),
+                              shape = factor(.data[[shape_axis]])), size = 3, alpha = 0.9) +
+      labs(color = color_axis, shape = shape_axis)
+  } else if (!too_many && !is.na(color_axis)) {
+    p1 <- p1 + geom_point(aes(color = factor(.data[[color_axis]])), size = 3, alpha = 0.9) +
+      labs(color = color_axis)
+  } else {
+    p1 <- p1 + geom_point(color = "steelblue", size = 2.4, alpha = 0.85)
+  }
+
+  p1 <- p1 +
+    geom_point(data = wr, color = "black", shape = 21, fill = "gold", size = 4.5, stroke = 1.2) +
     annotate("text", x = elbow_nc, y = min(d$r80_loci, na.rm=TRUE),
              label = paste0("  elbow ~ ", format(round(elbow_nc), big.mark=",")),
              color = "red", hjust = 0, vjust = 0) +
     labs(title = "r80 broadly-shared loci vs assembly size",
          subtitle = paste0("Winner (gold): ", best_id, " — fewest contigs at the r80 plateau"),
-         x = "n_contigs (assembly size)", y = "r80 loci (polymorphic & genotyped in >=80% of samples)",
-         color = "cutoff2") +
+         x = "n_contigs (assembly size)",
+         y = "r80 loci (polymorphic & genotyped in >=80% of samples)") +
     scale_x_continuous(labels = scales::comma) +
     scale_y_continuous(labels = scales::comma) +
     theme_bw() + theme(plot.title = element_text(face="bold"))
-  ggsave("optimize_plot.png", p1, width = 9, height = 6, dpi = 150)
+  ggsave("optimize_plot.png", p1, width = 9.5, height = 6, dpi = 150)
 }, error = function(e) {
   png("optimize_plot.png", width=700, height=500); plot.new()
   text(.5,.5,paste("elbow plot failed:", conditionMessage(e)), col="grey40"); dev.off()
 })
 
-# ---------------- PLOT 2: r80 faceted vs each tuned (varying) parameter ----------------
-# Only facet over parameters that actually VARY in the grid, so the user can SEE
-# which knob moves r80.
+# ---------------- PLOT 2: r80 faceted vs each SWEPT parameter ----------------
+# Facet over EVERY axis that varies (c1,c2,isim,divf,mr,fsim), so the user sees
+# which knob actually moves r80. Color by n_contigs to expose size-confounding.
 tryCatch({
+  axis_cols <- c("c1","c2","isim","divf","mr","fsim")
   param_long <- d %>%
-    select(id, r80_loci, n_contigs, c1, c2, sim) %>%
-    rename(final_sim = sim) %>%
-    pivot_longer(c(c1, c2, final_sim), names_to = "parameter", values_to = "value") %>%
-    group_by(parameter) %>% filter(n_distinct(value) > 1) %>% ungroup()
+    select(id, r80_loci, n_contigs, all_of(axis_cols)) %>%
+    pivot_longer(all_of(axis_cols), names_to = "parameter", values_to = "value") %>%
+    group_by(parameter) %>% filter(dplyr::n_distinct(value) > 1) %>% ungroup() %>%
+    mutate(parameter = factor(parameter, levels = axis_cols))
   if (nrow(param_long) > 0) {
     p2 <- ggplot(param_long, aes(factor(value), r80_loci)) +
       geom_jitter(aes(color = n_contigs), width = 0.12, height = 0, size = 2, alpha = 0.8) +
       facet_wrap(~ parameter, scales = "free_x") +
       scale_color_viridis_c(labels = scales::comma) +
       labs(title = "r80 vs each swept parameter",
-           subtitle = "Which knob actually moves broadly-shared loci?",
+           subtitle = "Which knob moves broadly-shared loci? (color = assembly size; if r80 tracks color, it's size-confounded)",
            x = NULL, y = "r80 loci", color = "n_contigs") +
       theme_bw() + theme(plot.title = element_text(face="bold"))
-    ggsave("optimize_params_plot.png", p2, width = 9, height = 5, dpi = 150)
+    ggsave("optimize_params_plot.png", p2, width = 10, height = 6, dpi = 150)
   } else {
     png("optimize_params_plot.png", width=700, height=400); plot.new()
     text(.5,.5,"No parameter was swept (all axes fixed)", col="grey40"); dev.off()

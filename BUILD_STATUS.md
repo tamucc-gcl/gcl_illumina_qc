@@ -693,3 +693,56 @@ NOTE: grid changed (assembly params now in meta.id) => assemble_rainbow_candidat
   inert like initial-sim was? (If div_f is flat, the real lever is elsewhere.)
 - Is the winner's size defensible for downstream genotyping (enough shared loci, not
   pure junk)? With only ~12 candidates the elbow may be coarse — widen grid if so.
+
+---
+
+## PIVOT FIXES (round 2) — after the 6-candidate pinned-grid run
+
+Run with pinned c1/c2 produced only 6 candidates over a 4% size range (46.1k-48.0k
+contigs). Three problems surfaced; all fixed.
+
+1. ELBOW NEEDS A SIZE-SPANNING GRID. With c1/c2 pinned, the r80-vs-contigs "curve"
+   was a short monotone rising line with NO interior elbow -> Kneedle picked an
+   arbitrary endpoint (the winner flipped between top/bottom depending on tie-break
+   noise). FIX: default now SWEEPS the size-driving axes again — cutoff1=[2..8],
+   cutoff2=[3,4] — plus div_f=[.1,.2,.5], final_similarity=[.90,.95]. = 84 candidates
+   (max_grid_candidates raised 64->100). The cutoff sweep GENERATES the curve; the
+   r80 elbow is still the SELECTOR. Any axis set to a SCALAR is pinned (not swept) —
+   pin-any-axis preserved. (cluster_similarity=0.8 and merge_r=2 pinned by default.)
+   Confirmed: div_f DOES move r80 (0.5->0.1 raised r80 2789->2967 / 2829->3173), but
+   along the size axis — which is fine, the elbow is size-aware.
+
+2. SWEPT PARAMS WEREN'T COLUMNS -> params_plot showed only final_sim facet. FIX:
+   compute_cheap_signals + compute_snp_signals now emit ALL SIX axes as columns.
+   New schemas: cheap = id c1 c2 isim divf mr fsim n_contigs total_len mean_len (10,
+   "ciiddidiii"); snp = id c1 c2 isim divf mr fsim concordance r80_loci snps_per_locus
+   n_snps n_called_contigs (12, "ciiddidddddi"). final_rank.tsv now writes c1,c2,isim,
+   divf,mr,fsim. rank_and_select.R: params_plot facets over EVERY varying axis (colored
+   by n_contigs to expose size-confounding); elbow plot encodes the swept-param combo
+   via color (prefers divf/fsim) + shape (when grid <=40 combos), single color above.
+
+3. NB PLOT AXIS BROKEN (image 1: "1 0 0 0" labels, histogram a thin band). Cause:
+   scale_y_continuous(comma_format + log10_trans) on counts that hit 0 baseline ->
+   log10(0)=-Inf, degenerate breaks. FIX in fit_nb_mixture.R: floor n and component
+   densities at 1, scale_y_log10 with trans_breaks/trans_format(math_format(10^.x)) +
+   annotation_logticks, coord ylim=c(1,ymax). NOTE: even fixed, the two NB components
+   barely separate on this data (locus comp is 17% mass, shallow shoulder) — the
+   cutoff1=5 VALUE is sound (matches knee) but the PICTURE is inherently muddy here.
+
+### Validated (python ports; no R in sandbox)
+- new col_types lengths match (cheap 10, snp 12); type assignment correct ✓
+- aesthetic-axis detection: divf+fsim flagged varying -> 2 facets (not 1) ✓
+- elbow on 6-pt pinned grid is UNSTABLE (endpoint flip) = confirms why wide grid needed ✓
+- all touched files balanced ✓; default grid 84 < guardrail 100 ✓
+
+### Files changed this round
+main.nf (cutoff1/cutoff2 back to wide swept defaults; max_grid 100),
+compute_cheap_signals.nf + compute_snp_signals.nf (6-axis columns),
+r_scripts/rank_and_select.R (wide readers, full faceting, param-combo aesthetics),
+r_scripts/fit_nb_mixture.R (log-axis fix).
+
+### RERUN
+Same command as before (genome_size_est/size_select/enzyme params). Default now 84
+candidates spanning ~5k-90k contigs so the r80 elbow is interior & stable (~27k from
+the earlier full run). Inspect optimize_params_plot.png: which axis (c1? c2? div_f?
+fsim?) actually moves r80 vs just tracking n_contigs color.
