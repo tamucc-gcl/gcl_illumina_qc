@@ -22,9 +22,23 @@ process clumpify {
     // Set parameters based on sequencing type
     def subs_param = sequencing_type == 'ddrad' ? 'subs=0' : 'subs=2'
     def containment_param = sequencing_type == 'ddrad' ? 'containment=f' : 'containment=t'
-    def optical_param = sequencing_type == 'ddrad' ? 'optical=t' : 'optical=f'
+    def want_optical = sequencing_type == 'ddrad'   // ddRAD wants optical dedup *if possible*
 
     """
+    set -euo pipefail
+
+    # Decide whether optical dedup is even possible: Clumpify needs 7 colon-fields
+    # (…:lane:tile:x:y) in the read header. Old/demultiplexed reads often don't have them.
+    HDR=\$(zcat ${read1} | head -n1)
+    NCOLON=\$(echo "\$HDR" | tr -cd ':' | wc -c)
+    if [ "${want_optical}" = "true" ] && [ "\$NCOLON" -ge 6 ]; then
+        OPTICAL="optical=t dupedist=12000"
+        echo "Header looks coordinate-bearing (\$NCOLON colons) -> optical dedup ON"
+    else
+        OPTICAL="optical=f"
+        echo "Header lacks flowcell coordinates (\$NCOLON colons) or optical not requested -> optical dedup OFF"
+    fi
+
     clumpify.sh \
         in=${read1} \
         in2=${read2} \
@@ -32,7 +46,7 @@ process clumpify {
         out2=${sample_id}_fp1-clmp.r2.fq.gz \
         overwrite=t \
         dedupe=t \
-        ${optical_param} \
+        ${OPTICAL} \
         dupedist=12000 \
         addcount=t \
         ${subs_param} \
