@@ -29,7 +29,7 @@ process clumpify {
 
     # Decide whether optical dedup is even possible: Clumpify needs 7 colon-fields
     # (…:lane:tile:x:y) in the read header. Old/demultiplexed reads often don't have them.
-    HDR=\$(zcat ${read1} | head -n1)
+    HDR=\$( { zcat ${read1} 2>/dev/null || true; } | head -n1 )
     NCOLON=\$(echo "\$HDR" | tr -cd ':' | wc -c)
     if [ "${want_optical}" = "true" ] && [ "\$NCOLON" -ge 6 ]; then
         OPTICAL="optical=t dupedist=12000"
