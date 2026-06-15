@@ -46,8 +46,7 @@ process clumpify {
         out2=${sample_id}_fp1-clmp.r2.fq.gz \
         overwrite=t \
         dedupe=t \
-        ${OPTICAL} \
-        dupedist=12000 \
+        \${OPTICAL} \
         addcount=t \
         ${subs_param} \
         ${containment_param} \
