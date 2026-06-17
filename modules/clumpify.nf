@@ -24,6 +24,13 @@ process clumpify {
     def containment_param = sequencing_type == 'ddrad' ? 'containment=f' : 'containment=t'
     def want_optical = sequencing_type == 'ddrad'   // ddRAD wants optical dedup *if possible*
 
+    // PIN the JVM heap explicitly. BBTools autodetects available RAM from the
+    // cgroup slice visible at launch, NOT the SLURM allocation; when that slice is
+    // tiny it computes a NEGATIVE -Xmx (e.g. -Xmx-62m) and the JVM fails to start.
+    // Derive the heap from task.memory (set by the 'clumpify' label in
+    // nextflow.config), leaving ~2 GB headroom for non-heap/JVM overhead.
+    def heap_gb = (task.memory ? Math.max(1, (task.memory.toGiga() as int) - 2) : 8)
+
     """
     set -euo pipefail
 
@@ -66,6 +73,7 @@ process clumpify {
     fi
 
     clumpify.sh \
+        -Xmx${heap_gb}g \
         in=${read1} \
         in2=${read2} \
         out=${sample_id}_fp1-clmp.r1.fq.gz \
