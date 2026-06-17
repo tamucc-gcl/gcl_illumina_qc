@@ -356,8 +356,8 @@ workflow {
             genome_indexed = prepare_genome.out.genome
         }
         
-        // Map reads to reference
-        map_reads( repair.out, genome_indexed.first() )
+        // Map reads to reference (pass sequencing type so markdup is skipped for ddRAD)
+        map_reads( repair.out, genome_indexed.first(), Channel.value(effective_sequencing_type) )
         
         // Generate BAM statistics
         samtools_stats( map_reads.out )
@@ -414,8 +414,8 @@ workflow {
         prepare_genome_local( denovo_assembly.out.reference )
         genome_indexed = prepare_genome_local.out.genome
         
-        // Map reads to de novo assembly
-        map_reads( repair.out, genome_indexed.first() )
+        // Map reads to de novo assembly (pass sequencing type so markdup is skipped for ddRAD)
+        map_reads( repair.out, genome_indexed.first(), Channel.value(effective_sequencing_type) )
         
         // Generate BAM statistics
         samtools_stats( map_reads.out )
