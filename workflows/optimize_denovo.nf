@@ -108,6 +108,11 @@ workflow optimize_denovo {
         // nb value as an int channel (single value, broadcast)
         nb_c1_ch = fit_nb_mixture.out.nb_cutoff1.map { f -> f.text.trim() as int }
 
+        // N = number of individuals entering assembly. Counted from the per-sample
+        // uniq.seqs outputs (one per sample), NOT by re-tapping cleaned_reads. Used to
+        // resolve the N-RELATIVE cutoff2 percentages into integer individual-counts.
+        n_samples_ch = extract_unique_seqs.out.uniq_seqs.count()
+
         // ===== GRID MODEL =====================================================
         // Six axes, each a SCALAR (fixed) or a LIST (swept). Normalize each to a
         // list; the candidate grid is the Cartesian product. The cutoff axes are a
@@ -137,17 +142,28 @@ workflow optimize_denovo {
 
         // c1: null sentinel means "use the NB crossover" (resolved per-value below).
         def c1_axis   = asList(params.cutoff1)
-        def c2_axis   = asList(params.cutoff2).collect { it as int }
+        // c2: resolved at runtime. If params.cutoff2 (absolute) is set it OVERRIDES;
+        // otherwise cutoff2 = round(N * pct/100) for each pct in params.cutoff2_pct,
+        // floored at params.cutoff2_min and de-duplicated. (Resolved in the flatMap
+        // below, where the runtime N value is available.)
+        def c2_abs_override = (params.cutoff2 != null) ? asList(params.cutoff2).collect { it as int } : null
+        def c2_pct_axis     = asList(params.cutoff2_pct).collect { it as double }
+        def c2_min          = (params.cutoff2_min ?: 2) as int
         def isim_axis = asList(params.cluster_similarity).collect { it as double }
         def fsim_axis = asList(params.final_similarity).collect { it as double }
         def divf_axis = asList(params.div_f).collect { it as double }
         def mr_axis   = asList(params.merge_r).collect { it as int }
 
-        // Resolve the c1 axis against the runtime NB value, then build the full grid.
-        // We carry the whole axis spec into a flatMap over the NB value so c1=null
-        // becomes the NB integer; explicit scalars/lists pass through unchanged.
-        grid_metas = nb_c1_ch.flatMap { nb ->
+        // Resolve the c1 axis against the runtime NB value AND the c2 axis against the
+        // runtime N, then build the full grid. Combine the two single-value channels
+        // so both runtime numbers are in scope when the Cartesian product is built.
+        grid_metas = nb_c1_ch.combine( n_samples_ch ).flatMap { nb, n_samples ->
             def c1_resolved = c1_axis.collect { it == null ? nb : (it as int) }.unique()
+            // N-relative cutoff2 (or absolute override)
+            def c2_axis = (c2_abs_override != null)
+                ? c2_abs_override.unique()
+                : c2_pct_axis.collect { pct -> Math.max(c2_min, Math.round(n_samples * pct / 100.0) as int) }.unique()
+            log.info "cutoff2 resolved (N=${n_samples}): ${ c2_abs_override != null ? "absolute ${c2_axis}" : "${c2_pct_axis}% -> ${c2_axis} individuals" }"
             def combos = []
             for (c1 in c1_resolved)
               for (c2 in c2_axis)

@@ -55,8 +55,24 @@ params.do_optimize = false
 //   needs. Pin to a scalar (e.g. --cutoff1 5) to fix it; null => include the NB
 //   crossover value in the swept set as well.
 // NOTE: any axis set to a SCALAR is pinned (not swept). Lists are swept.
-params.cutoff1            = [2, 3, 4, 5, 6, 7, 8]   // SWEPT wide (size span); scalar pins; null adds NB value
-params.cutoff2            = [3, 4]                  // SWEPT low band (keeps the r80-interesting regime)
+//
+// cutoff1: default null => PIN at the NB-mixture crossover (data-driven, principled).
+//   The NB fit now produces a clean bimodal coverage distribution (error vs locus
+//   component), so the crossover is a real cutoff1 — no need to sweep it. Set an
+//   explicit scalar/list to override (e.g. --cutoff1 6, or --cutoff1 "5,6,7").
+params.cutoff1            = null                    // null => NB crossover (pinned, principled)
+//
+// cutoff2: N-RELATIVE. cutoff2 = "min individuals a sequence must appear in", so it
+//   MUST scale with the number of individuals. A fixed small band (e.g. [3,7]) is
+//   meaningless at N=798 (that is <1% of samples) and floods the assembly with rare
+//   loci -> every candidate oversized -> r80 monotone, no interior optimum. We sweep
+//   cutoff2 as PERCENTAGES of N (resolved to integer individual-counts at runtime),
+//   which generalizes across taxa/sample sizes and SPANS the regime where the r80
+//   curve turns over. params.cutoff2 (absolute) OVERRIDES the percentages if set.
+params.cutoff2_pct        = [5, 10, 20, 30]         // SWEPT as % of N individuals (N-relative; generalizes)
+params.cutoff2            = null                     // absolute override (scalar/list); null => use cutoff2_pct * N
+params.cutoff2_min        = 2                        // floor on resolved cutoff2 (never below this)
+//
 params.cluster_similarity = 0.8                     // INITIAL CD-HIT (loose pre-grouping; pinned — minor knob)
 params.final_similarity  = [0.90, 0.95]            // FINAL CD-HIT (per-taxon precision merge -> swept)
 params.div_f             = [0.1, 0.2, 0.5]         // Rainbow div -f (allele-split freq -> swept)
@@ -170,16 +186,31 @@ workflow {
             return [v]
         }
         def pf_c1   = pfList(params.cutoff1)
-        def pf_c2   = pfList(params.cutoff2)
         def pf_isim = pfList(params.cluster_similarity)
         def pf_fsim = pfList(params.final_similarity)
         def pf_divf = pfList(params.div_f)
         def pf_mr   = pfList(params.merge_r)
+
+        // cutoff2: resolve the SAME way optimize_denovo will. Absolute override if
+        // params.cutoff2 set; else round(N * pct/100) per pct, floored at cutoff2_min.
+        def pf_N    = (pf_nfiles / 2) as int
+        def pf_c2min = (params.cutoff2_min ?: 2) as int
+        def pf_c2
+        def pf_c2_desc
+        if (params.cutoff2 != null) {
+            pf_c2 = pfList(params.cutoff2).collect { (it as Double) as int }.unique()
+            pf_c2_desc = "absolute ${pf_c2}"
+        } else {
+            def pf_pct = pfList(params.cutoff2_pct).collect { it as double }
+            pf_c2 = pf_pct.collect { pct -> Math.max(pf_c2min, Math.round(pf_N * pct / 100.0) as int) }.unique()
+            pf_c2_desc = "${pf_pct}% of N=${pf_N} -> ${pf_c2} individuals"
+        }
         // c1=null contributes the (runtime) NB value = 1 value for counting purposes.
         def c1_n = pf_c1.collect { it == null ? 'NB' : it }.unique().size()
+        def pf_c1_disp = pf_c1.collect { it == null ? 'NB(runtime)' : it }
         def n_grid = c1_n * pf_c2.size() * pf_isim.size() * pf_fsim.size() * pf_divf.size() * pf_mr.size()
         def gmax = (params.max_grid_candidates ?: 100) as int
-        log.info "PRE-FLIGHT | OPTIMIZE grid axes: cutoff1=${pf_c1} cutoff2=${pf_c2} init_sim=${pf_isim} final_sim=${pf_fsim} div_f=${pf_divf} merge_r=${pf_mr}"
+        log.info "PRE-FLIGHT | OPTIMIZE grid axes: cutoff1=${pf_c1_disp} cutoff2=${pf_c2_desc} init_sim=${pf_isim} final_sim=${pf_fsim} div_f=${pf_divf} merge_r=${pf_mr}"
         log.info "PRE-FLIGHT | grid = ${n_grid} candidate(s) (each = 1 assembly + 1 SNP pass); guardrail max_grid_candidates=${gmax}"
         if (n_grid > gmax)
             log.warn "PRE-FLIGHT | grid (${n_grid}) EXCEEDS max_grid_candidates (${gmax}) — pin axes to scalars or raise the guardrail."

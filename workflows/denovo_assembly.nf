@@ -9,6 +9,7 @@ nextflow.enable.dsl = 2
 
 include { extract_unique_seqs }  from '../modules/extract_unique_seqs.nf'
 include { assembly_diagnostics } from '../modules/assembly_diagnostics.nf'
+include { fit_nb_mixture }       from '../modules/fit_nb_mixture.nf'
 include { filter_unique_seqs }   from '../modules/filter_unique_seqs.nf'
 include { assemble_rainbow }     from '../modules/assemble_rainbow.nf'
 include { optimize_denovo }      from './optimize_denovo.nf'
@@ -57,19 +58,39 @@ workflow denovo_assembly {
 
             assembly_diagnostics( all_uniq_seqs )
 
+            // NB-mixture cutoff1 (same principled value used in optimize mode), with
+            // the diagnostics knee as graceful fallback inside fit_nb_mixture.
+            fit_nb_mixture(
+                assembly_diagnostics.out.coverage_freq,
+                assembly_diagnostics.out.cutoff1_value
+            )
+
             def c1_fixed   = firstOf(params.cutoff1)
-            def c2_fixed   = firstOf(params.cutoff2)
             def isim_fixed = firstOf(params.cluster_similarity)
             def divf_fixed = firstOf(params.div_f)
             def mr_fixed   = firstOf(params.merge_r)
             def fsim_fixed = firstOf(params.final_similarity)
 
+            // cutoff1: explicit value if given (first element if a list); else the
+            // NB crossover (consistent with optimize mode — NOT the geometric knee).
             cutoff1_ch = (c1_fixed != null)
                 ? Channel.value( c1_fixed as int )
-                : assembly_diagnostics.out.cutoff1_value.map{ f -> f.text.trim() as int }
-            cutoff2_ch = (c2_fixed != null)
-                ? Channel.value( c2_fixed as int )
-                : assembly_diagnostics.out.cutoff2_value.map{ f -> f.text.trim() as int }
+                : fit_nb_mixture.out.nb_cutoff1.map{ f -> f.text.trim() as int }
+
+            // cutoff2: N-RELATIVE, same logic as optimize mode but resolved to ONE
+            // value. Precedence: explicit absolute params.cutoff2 (first if a list)
+            //   -> else round(N * firstOf(cutoff2_pct)/100) floored at cutoff2_min
+            //   -> else (no pct supplied) the diagnostics knee.
+            def c2_abs    = firstOf(params.cutoff2)
+            def c2_pct    = firstOf(params.cutoff2_pct)
+            def c2_min    = (params.cutoff2_min ?: 2) as int
+            n_samples_ch  = extract_unique_seqs.out.uniq_seqs.count()
+            cutoff2_ch =
+                (c2_abs != null)
+                    ? Channel.value( (c2_abs as Double) as int )
+                    : (c2_pct != null)
+                        ? n_samples_ch.map{ n -> Math.max(c2_min, Math.round(n * (c2_pct as double) / 100.0) as int) }
+                        : assembly_diagnostics.out.cutoff2_value.map{ f -> f.text.trim() as int }
 
             filter_unique_seqs( all_uniq_seqs, cutoff1_ch, cutoff2_ch )
 
