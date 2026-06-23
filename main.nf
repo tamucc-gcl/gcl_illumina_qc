@@ -619,14 +619,23 @@ workflow {
         )
         .collect()
     
-    // Handle mapping summary for report generation
-    // Use ifEmpty to provide a default value when no mapping was done
-    //mapping_summary_for_report = mapping_summary_ch.ifEmpty("NO_MAPPING")
-    mapping_summary_for_report = mapping_summary_ch[0].ifEmpty {
-            def f = file("${workDir}/NO_MAPPING_SUMMARY.txt")
-            f.text = "No mapping performed"
-            return f
-        }
+    // Handle mapping summary for report generation.
+    // In mapping modes, mapping_summary_ch = samtools_summary.out (a MULTI-output,
+    // indexable [0]=summary txt, [1]=insert-size violin). In no-genome mode it is a
+    // single Channel.empty() with NO [0] — indexing it throws "getAt([0])". So only
+    // index in mapping modes; otherwise hand the report a placeholder file directly.
+    def mapping_performed = (params.genome || params.accession || params.assembly_mode == "denovo")
+    if (mapping_performed) {
+        mapping_summary_for_report = mapping_summary_ch[0].ifEmpty {
+                def f = file("${workDir}/NO_MAPPING_SUMMARY.txt")
+                f.text = "No mapping performed"
+                return f
+            }
+    } else {
+        mapping_summary_for_report = Channel.value(
+            file("${workDir}/NO_MAPPING_SUMMARY.txt").with { f -> f.text = "No mapping performed"; f }
+        )
+    }
 
     // Create placeholders once for any non-actual outputs
     placeholder_outputs = create_placeholders()
