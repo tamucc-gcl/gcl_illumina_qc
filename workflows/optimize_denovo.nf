@@ -311,7 +311,7 @@ workflow optimize_denovo {
             snp_rows,
             fit_nb_mixture.out.nb_cutoff1,
             expected_loci_ch,
-            (params.r80_elbow_min_slope ?: 30)
+            (params.r80_knee_frac ?: 0.10)
         )
 
         // ----- FINALIZE: select winning candidate as the production reference -----

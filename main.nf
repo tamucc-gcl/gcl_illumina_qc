@@ -69,13 +69,13 @@ params.cutoff1            = null                    // null => NB crossover (pin
 //   cutoff2 as PERCENTAGES of N (resolved to integer individual-counts at runtime),
 //   which generalizes across taxa/sample sizes and SPANS the regime where the r80
 //   curve turns over. params.cutoff2 (absolute) OVERRIDES the percentages if set.
-params.cutoff2_pct        = [5, 10, 20, 30]         // SWEPT as % of N individuals (N-relative; generalizes)
+params.cutoff2_pct        = [3, 5, 8, 10, 12, 15, 20, 30]   // SWEPT as % of N individuals. Densified around the ~8-12% peak seen on COPE and extended at both ends (3% = oversized/declining side, 30% = steep rising limb) so the fit captures the full rise->level-off(->decline) curve.
 params.cutoff2            = null                     // absolute override (scalar/list); null => use cutoff2_pct * N
 params.cutoff2_min        = 2                        // floor on resolved cutoff2 (never below this)
 //
 params.cluster_similarity = 0.8                     // INITIAL CD-HIT (loose pre-grouping; pinned — minor knob)
-params.final_similarity  = [0.90, 0.95]            // FINAL CD-HIT (per-taxon precision merge -> swept)
-params.div_f             = [0.1, 0.2, 0.5]         // Rainbow div -f (allele-split freq -> swept)
+params.final_similarity  = 0.9                      // FINAL CD-HIT (dDocent default). PINNED by default — on COPE it barely moved r80 (second-order to cutoff2). Pass a list (e.g. "0.90,0.95") to sweep.
+params.div_f             = 0.5                      // Rainbow div -f (dDocent default). PINNED by default — barely moved r80 on COPE. Pass a list (e.g. "0.1,0.5") to sweep.
 params.merge_r           = 2                        // Rainbow merge -r (pinned; list to sweep)
 
 // Grid-size guardrail: warn if the Cartesian product exceeds this. The DEFAULT grid
@@ -85,7 +85,7 @@ params.merge_r           = 2                        // Rainbow merge -r (pinned;
 params.max_grid_candidates = 100
 
 // SNP-signal sampling + r80 selection
-params.snp_sample_pct  = 75              // fraction of samples mapped for the r80/SNP pass (tunable; r80 stability scales with this)
+params.snp_sample_pct  = 20              // fraction of samples mapped for the r80/SNP pass. r80 = "genotyped in >=80% of the SUBSET", so too small a subset suppresses + jaggedises the r80 curve; 20% gives a cleaner curve for the fit while staying affordable.
 params.optimize_seed   = 42              // deterministic pseudo-rep split + SNP-sample selection
 params.n_pseudo_reps   = 6               // individuals split 50/50 for the (reported) concordance signal; never published
 params.r80_threshold   = 0.8             // STACKS r80: locus genotyped in >= this fraction of SNP-subset samples
@@ -94,7 +94,7 @@ params.r80_threshold   = 0.8             // STACKS r80: locus genotyped in >= th
 // below this threshold (loci per 1000 added contigs). Below the elbow you are
 // paying contigs (paralogs/junk) for ~no new broadly-shared loci. Smaller =>
 // more permissive (larger reference); larger => more parsimonious (smaller).
-params.r80_elbow_min_slope = 30          // loci gained per 1000 added contigs at the elbow
+params.r80_knee_frac   = 0.10            // leveling-off point = where the FITTED r80(n_contigs) marginal slope drops below this fraction of its initial slope (diminishing returns). Smaller => stricter/flatter (larger assembly); larger => earlier (smaller).
 
 // --- Optional biological locus-count anchor (signal 2) ---
 // If ALL THREE are supplied, expected RAD locus count is estimated and proximity

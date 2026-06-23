@@ -13,7 +13,7 @@ process rank_and_select {
         path(snp_rows)          // many snp_<id>.tsv   (id c1 c2 sim concordance r80_loci snps_per_locus n_snps n_called_contigs)
         path(nb_cutoff1)        // nb_cutoff1.value (reported)
         val(expected_loci)      // integer or "NA" (reported as anchor)
-        val(min_slope)          // r80-elbow override; <=0 => parameter-free Kneedle
+        val(knee_frac)          // leveling-off threshold: fraction of initial fitted slope (default 0.10)
 
     output:
         path("final_rank.tsv"),          emit: final_rank
@@ -29,6 +29,6 @@ process rank_and_select {
     echo "Selecting from \$(wc -l < cheap_all.tsv) candidates (\$(wc -l < snp_all.tsv) with SNP rows)"
 
     Rscript ${projectDir}/r_scripts/rank_and_select.R \\
-        cheap_all.tsv snp_all.tsv ${nb_cutoff1} ${expected_loci} ${min_slope}
+        cheap_all.tsv snp_all.tsv ${nb_cutoff1} ${expected_loci} ${knee_frac}
     """
 }
