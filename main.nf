@@ -319,7 +319,13 @@ workflow {
 
     // Group fastq_screen results back together for repair
     fastq_screen.out
-        .groupTuple(by: 0)
+        // size: 2 = each sample has exactly R1 + R2 screened separately. Without an
+        // explicit size, groupTuple is BLOCKING — it waits for the entire fastq_screen
+        // channel to close before emitting ANY group, so repair (and everything after)
+        // can't start until the LAST fastq_screen task finishes, serializing the two
+        // stages. With size: 2 each sample's group is released the moment both its
+        // reads are done, so repair pipelines per-sample. (PE always has exactly 2.)
+        .groupTuple(by: 0, size: 2)
         .map{ sid, reads, reports, read_nums -> 
             // Sort by read number to ensure R1, R2 order
             def sorted = [reads, reports, read_nums].transpose().sort{ it[2] }
