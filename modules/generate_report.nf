@@ -131,9 +131,9 @@ if genome_source.startswith("denovo:"):
     assembly_info = []
 
     if diag_plots_performed:
-        assembly_info.append("### Cutoff Selection (auto-detected from data)")
+        assembly_info.append("### Cutoff Diagnostics (within-individual coverage & cross-sample sharing)")
         assembly_info.append("")
-        assembly_info.append("Cutoffs were selected by knee detection on the unique-sequence retention curves below. Override with `--cutoff1` / `--cutoff2` if needed.")
+        assembly_info.append("These curves characterize the unique-sequence data that seed assembly: cutoff1 is the minimum within-individual coverage to keep a sequence, and cutoff2 is the minimum number of individuals a sequence must appear in. In single-assembly mode they set the operating point; in optimization mode the actual cutoffs are chosen by the grid + r80 selector below (these remain a useful view of the underlying distributions).")
         assembly_info.append("")
         assembly_info.append(f"![Cutoff 1 selection](denovo_assembly/diagnostics/cutoff1_curve.png)")
         assembly_info.append("")
@@ -141,45 +141,86 @@ if genome_source.startswith("denovo:"):
         assembly_info.append("")
 
     if sweep_performed:
-        assembly_info.append("### Assembly Parameter Sweep")
+        assembly_info.append("### Assembly Optimization (r80 diminishing-returns selection)")
         assembly_info.append("")
+        assembly_info.append(
+            "A grid of candidate references was assembled (cutoff1 fixed at the negative-binomial coverage crossover by default; cutoff2 swept as a set of percentages of the number of individuals; Rainbow/CD-HIT assembly parameters pinned unless swept). Each candidate was scored by **r80** — the number of contigs carrying at least one SNP genotyped in \u226580% of a sampled subset of individuals (the STACKS r80 rule) — plotted against assembly size (n_contigs). The winner is the **diminishing-returns point**: a monotone-saturating curve is fit to r80-vs-n_contigs and the smallest assembly past which the fitted marginal r80 gain per added contig drops below a set fraction of its initial slope is chosen (the leveling-off point), then confirmed against the best observed r80. This selects the most parsimonious reference that still captures the bulk of the broadly-genotypeable loci, rather than the largest assembly."
+        )
+        assembly_info.append("")
+
+        # ---- read the new optimizer ranking table (final_rank.tsv) ----
         try:
             import csv as _csv
             with open("${sweep_summary}", 'r') as f:
-                sweep_rows = list(_csv.DictReader(f, delimiter='\\t'))
+                opt_rows = list(_csv.DictReader(f, delimiter='\\t'))
         except Exception as e:
-            sweep_rows = []
-            print(f"Could not read sweep summary: {e}")
+            opt_rows = []
+            print(f"Could not read optimization summary: {e}")
 
-        best = sweep_rows[0] if sweep_rows else {}
-        sel = f"cutoff1={best.get('c1','?')}, cutoff2={best.get('c2','?')}, cluster_similarity={best.get('sim','?')}" if best else "unknown"
+        def _to_int(x):
+            try: return int(float(x))
+            except Exception: return None
+        def _to_float(x):
+            try: return float(x)
+            except Exception: return None
+
+        winner = next((r for r in opt_rows if str(r.get('is_winner','')).strip().upper() == 'TRUE'), None)
+        if winner:
+            wc1 = winner.get('c1','?'); wc2 = winner.get('c2','?')
+            wnc = _to_int(winner.get('n_contigs','')); wr80 = _to_int(winner.get('r80_loci',''))
+            sel = (f"cutoff1={wc1}, cutoff2={wc2} individuals, "
+                   f"init_sim={winner.get('isim','?')}, div_f={winner.get('divf','?')}, "
+                   f"merge_r={winner.get('mr','?')}, final_sim={winner.get('fsim','?')}")
+            assembly_info.append(f"**Selected reference:** {sel}")
+            assembly_info.append("")
+            wnc_s = f"{wnc:,}" if wnc is not None else "?"
+            wr80_s = f"{wr80:,}" if wr80 is not None else "?"
+            assembly_info.append(f"- Assembly size (n_contigs): {wnc_s}")
+            assembly_info.append(f"- r80 broadly-shared loci: {wr80_s}")
+            assembly_info.append("")
+
+        # r80-vs-size curve (fitted model + leveling-off + anchor + winner)
+        assembly_info.append(f"![r80 vs assembly size (winner in gold)](denovo_assembly/optimize/optimize_plot.png)")
+        assembly_info.append("")
         assembly_info.append(
-            f"A candidate reference was assembled for each combination of cutoff1, cutoff2, and cluster_similarity, then a subset of samples was mapped back to score them. Selected combination: **{sel}** (highest composite of mapping rate, properly-paired rate, low soft-clipping, and alignment score)."
+            "The grey curve is the fitted model; the red dashed line marks the leveling-off (diminishing-returns) point; the gold point is the selected reference. Where an expected-locus anchor was supplied, a blue dotted line marks it (see below)."
         )
         assembly_info.append("")
-        assembly_info.append(f"![Assembly sweep comparison](denovo_assembly/sweep/sweep_comparison.png)")
+        # per-parameter view (only meaningful when >1 axis was swept; R writes a placeholder otherwise)
+        assembly_info.append(f"![r80 vs each swept parameter](denovo_assembly/optimize/optimize_params_plot.png)")
         assembly_info.append("")
 
-        if sweep_rows:
-            def _fmt(row, key, nd=2):
-                try:
-                    return f"{float(row.get(key,'')):.{nd}f}"
-                except Exception:
-                    return row.get(key, '')
-            best_id = best.get('id', '')
-            assembly_info.append(f"<details><summary>Full sweep results ({len(sweep_rows)} candidates, ranked by composite)</summary>")
+        # cutoff1 derivation (NB-mixture)
+        assembly_info.append("**cutoff1 (within-individual coverage threshold)** was derived from a 2-component negative-binomial mixture fit to the pooled coverage distribution — the crossover where the true-locus component overtakes the error component:")
+        assembly_info.append("")
+        assembly_info.append(f"![NB-mixture cutoff1 fit](denovo_assembly/optimize/nb_mixture_plot.png)")
+        assembly_info.append("")
+
+        # ranked candidate table (new columns)
+        if opt_rows:
+            def _f2(row, key, nd=3):
+                v = _to_float(row.get(key,''))
+                return f"{v:.{nd}f}" if v is not None else (row.get(key,'') or "NA")
+            assembly_info.append(f"<details><summary>Full optimization results ({len(opt_rows)} candidates, ordered by assembly size)</summary>")
             assembly_info.append("")
-            assembly_info.append("| cutoff1 | cutoff2 | cluster_similarity | n samples | mapping % | properly paired % | soft-clip/read | mean AS | composite |")
-            assembly_info.append("|---|---|---|---|---|---|---|---|---|")
-            for r in sweep_rows:
-                mark = " (selected)" if r.get('id') == best_id else ""
+            assembly_info.append("| cutoff1 | cutoff2 | init_sim | div_f | merge_r | final_sim | n_contigs | r80 loci | SNPs/locus | concordance | selected |")
+            assembly_info.append("|---|---|---|---|---|---|---|---|---|---|---|")
+            for r in opt_rows:
+                nc = _to_int(r.get('n_contigs','')); r80 = _to_int(r.get('r80_loci',''))
+                nc_s = f"{nc:,}" if nc is not None else (r.get('n_contigs','') or "")
+                r80_s = f"{r80:,}" if r80 is not None else (r.get('r80_loci','') or "")
+                mark = "yes" if str(r.get('is_winner','')).strip().upper() == 'TRUE' else ""
                 assembly_info.append(
-                    f"| {r.get('c1','')}{mark} | {r.get('c2','')} | {r.get('sim','')} | {r.get('n_samples','')} | {_fmt(r,'map_rate')} | {_fmt(r,'pp_rate')} | {_fmt(r,'softclip_per_read')} | {_fmt(r,'mean_AS')} | {_fmt(r,'composite',3)} |"
+                    f"| {r.get('c1','')} | {r.get('c2','')} | {r.get('isim','')} | {r.get('divf','')} | "
+                    f"{r.get('mr','')} | {r.get('fsim','')} | {nc_s} | {r80_s} | "
+                    f"{_f2(r,'snps_per_locus',2)} | {_f2(r,'concordance',3)} | {mark} |"
                 )
             assembly_info.append("")
             assembly_info.append("</details>")
             assembly_info.append("")
-        assembly_info.append(f"Full ranked table: [sweep_summary.tsv](denovo_assembly/sweep/sweep_summary.tsv)")
+        assembly_info.append("Files: [final_rank.tsv](denovo_assembly/optimize/final_rank.tsv) (ranked candidates), [expected_loci_calculation.txt](denovo_assembly/optimize/expected_loci_calculation.txt) (biological anchor, if enabled), [nb_mixture_fit.txt](denovo_assembly/optimize/nb_mixture_fit.txt) (cutoff1 fit).")
+        assembly_info.append("")
+        assembly_info.append("Note: `concordance` is a reported-only diagnostic and is `NA` unless `--compute_concordance true` was set; it does not affect selection.")
         assembly_info.append("")
 
     if filter_performed:
