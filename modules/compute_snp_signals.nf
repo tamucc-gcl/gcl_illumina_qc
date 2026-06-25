@@ -1,15 +1,16 @@
-// modules/compute_snp_signals.nf  (chunk 5b — the non-circular genotype signals)
-// Runs on EVERY candidate (1-pass design; no cheap-signal gate). Two bcftools
-// passes per candidate, both mapping reads to that candidate then calling:
+// modules/compute_snp_signals.nf  (the non-circular genotype signals)
+// Runs on EVERY candidate (1-pass design; no cheap-signal gate). Maps reads to that
+// candidate then calls. Up to two passes:
 //
-//  PASS A — pseudo-rep CONCORDANCE (primary): for each pseudo-rep individual, map
-//    its two 50/50 half-replicates SEPARATELY, call genotypes on each, and compute
-//    DEPTH-WEIGHTED genotype agreement at sites covered in both halves:
+//  PASS A — pseudo-rep CONCORDANCE (OPTIONAL, default OFF via params.compute_concordance):
+//    reported-only diagnostic. For each pseudo-rep individual, map its two 50/50
+//    half-replicates SEPARATELY, call genotypes on each, and compute DEPTH-WEIGHTED
+//    genotype agreement at sites covered in both halves:
 //        concordance = sum_i w_i * [gt_a_i == gt_b_i] / sum_i w_i,  w_i = dp_a+dp_b
-//    Averaged across the pseudo-rep individuals. A good reference genotypes the
-//    same individual consistently regardless of which read-half; a paralog-
-//    collapsed reference yields spurious hets that disagree between halves.
-//    This is NON-CIRCULAR: not monotone in reference size.
+//    Averaged across the pseudo-rep individuals. NON-CIRCULAR (not monotone in size),
+//    but does NOT drive selection (r80 does) and is ~constant in practice, so it is
+//    skipped by default. When disabled the caller stages an EMPTY pseudo-rep bag, the
+//    discovery loop below finds no *_a.r1.fq.gz files, and concordance is emitted as NA.
 //
 //  PASS B — r80 + SNP density (secondary): map the snp_sample_pct subset, joint-
 //    call, then:
@@ -45,6 +46,12 @@ process compute_snp_signals {
     # <parent>_b.r1.fq.gz / <parent>_b.r2.fq.gz. Map each half, call, compare.
     # ---------------------------------------------------------------
     CONC_NUM=0; CONC_DEN=0; N_INDIV=0
+
+    # If no pseudo-rep halves were staged (compute_concordance=false), PASS A is a
+    # no-op and concordance is reported as NA.
+    if ! ls *_a.r1.fq.gz >/dev/null 2>&1; then
+        echo "[snp ${meta.id}] PASS A skipped — no pseudo-rep halves staged (concordance disabled)"
+    fi
 
     # discover pseudo-rep parents by stripping _a.r1 suffix from a-half R1 files
     for ar1 in \$(ls *_a.r1.fq.gz 2>/dev/null | sort); do

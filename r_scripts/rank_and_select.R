@@ -47,9 +47,8 @@ knee_frac  <- suppressWarnings(as.numeric(args[5])); if (is.na(knee_frac) || kne
 nb_cut <- tryCatch(as.numeric(readLines(nb_file)[1]), error = function(e) NA_real_)
 
 cheap <- read_tsv(cheap_file,
-            col_names = c("id","c1","c2","isim","divf","mr","fsim",
-                          "n_contigs","total_len","mean_len"),
-            col_types = "ciiddidiii")
+            col_names = c("id","c1","c2","isim","divf","mr","fsim","n_contigs"),
+            col_types = "ciiddidi")
 
 snp <- tryCatch(
   read_tsv(snp_file,
@@ -154,6 +153,37 @@ if (!any(is.finite(d$r80_loci))) {
   if (nrow(elig) == 0) elig <- d %>% filter(is.finite(r80_loci))
   winner_row <- elig %>% arrange(desc(r80_loci), n_contigs) %>% slice(1)
   best_id  <- winner_row$id
+
+  # ---- CONFIRMATION: guard against the fitted knee UNDERSHOOTING the true optimum.
+  # The asymptotic fit runs on the running-max ENVELOPE, so a genuine DECLINE past a
+  # peak is masked (cummax flattens it); combined with snapping the knee to the
+  # nearest candidate, the knee can land LEFT of a materially-better candidate,
+  # excluding it. Because the final pick is data-driven, we cross-check the
+  # knee-winner against the RAW r80 maximum: if the knee-winner's r80 is more than
+  # CONFIRM_TOL below the best observed r80, the knee undershot -> OVERRIDE to the
+  # SMALLEST candidate whose r80 is within CONFIRM_TOL of the best (parsimonious
+  # near-best; still does NOT chase size — among near-best it takes the fewest
+  # contigs). Otherwise the knee-winner is confirmed and stands (we do NOT move to a
+  # smaller near-best, to respect the leveling-off criterion).
+  CONFIRM_TOL <- 0.02
+  r80_max <- max(d$r80_loci, na.rm = TRUE)
+  win_r80 <- d$r80_loci[d$id == best_id][1]
+  near_best <- d %>% filter(is.finite(r80_loci), r80_loci >= (1 - CONFIRM_TOL) * r80_max) %>%
+                 arrange(n_contigs)
+  smallest_near_best <- near_best$id[1]
+  if (is.finite(win_r80) && is.finite(r80_max) && win_r80 < (1 - CONFIRM_TOL) * r80_max
+      && !is.na(smallest_near_best)) {
+    message(sprintf(
+      "rank_and_select: CONFIRM FAILED — knee-winner %s (r80=%s) is >%.0f%% below best observed r80=%s; OVERRIDING to smallest near-best %s (r80=%s, n_contigs=%s).",
+      best_id, format(win_r80), CONFIRM_TOL*100, format(r80_max),
+      smallest_near_best, format(d$r80_loci[d$id==smallest_near_best]),
+      format(d$n_contigs[d$id==smallest_near_best])))
+    best_id <- smallest_near_best
+  } else {
+    message(sprintf(
+      "rank_and_select: CONFIRMED knee-winner %s (r80=%s) within %.0f%% of best observed r80=%s.",
+      best_id, format(win_r80), CONFIRM_TOL*100, format(r80_max)))
+  }
 }
 
 d$is_winner <- d$id == best_id
@@ -181,9 +211,13 @@ tryCatch({
   if (!is.null(fit_grid))
     p1 <- p1 + geom_line(data = fit_grid, aes(n_contigs, r80_fit),
                          color = "grey35", linewidth = 0.9)
-  # leveling-off line
+  # leveling-off line (red dashed)
   if (is.finite(level_nc))
     p1 <- p1 + geom_vline(xintercept = level_nc, linetype = "dashed", color = "red")
+  # biological anchor: expected ddRAD locus count (blue dotted), if enabled
+  if (is.finite(expected) && expected > 0)
+    p1 <- p1 + geom_vline(xintercept = expected, linetype = "dotted",
+                          color = "steelblue", linewidth = 0.8)
 
   if (!too_many && !is.na(color_axis) && !is.na(shape_axis)) {
     p1 <- p1 + geom_point(aes(color = factor(.data[[color_axis]]),
@@ -200,7 +234,12 @@ tryCatch({
     geom_point(data = wr, color = "black", shape = 21, fill = "gold", size = 4.5, stroke = 1.2) +
     annotate("text", x = level_nc, y = min(d$r80_loci, na.rm=TRUE),
              label = paste0("  levels off ~ ", format(round(level_nc), big.mark=",")),
-             color = "red", hjust = 0, vjust = 0) +
+             color = "red", hjust = 0, vjust = 0)
+  if (is.finite(expected) && expected > 0)
+    p1 <- p1 + annotate("text", x = expected, y = max(d$r80_loci, na.rm=TRUE),
+                        label = paste0("expected ~ ", format(round(expected), big.mark=","), "  "),
+                        color = "steelblue", hjust = 1, vjust = 1)
+  p1 <- p1 +
     labs(title = "r80 broadly-shared loci vs assembly size",
          subtitle = paste0("Winner (gold): ", best_id,
                            "  |  fit: ", fit_method,

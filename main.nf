@@ -87,7 +87,8 @@ params.max_grid_candidates = 100
 // SNP-signal sampling + r80 selection
 params.snp_sample_pct  = 20              // fraction of samples mapped for the r80/SNP pass. r80 = "genotyped in >=80% of the SUBSET", so too small a subset suppresses + jaggedises the r80 curve; 20% gives a cleaner curve for the fit while staying affordable.
 params.optimize_seed   = 42              // deterministic pseudo-rep split + SNP-sample selection
-params.n_pseudo_reps   = 6               // individuals split 50/50 for the (reported) concordance signal; never published
+params.compute_concordance = false       // PASS A pseudo-rep genotype-concordance signal. DEFAULT OFF: it maps n_pseudo_reps*2 half-libraries to EVERY candidate (expensive) and is REPORTED-ONLY (does not drive selection — r80 does). On real data it was ~constant across the grid. Set true to emit the (diagnostic) concordance column.
+params.n_pseudo_reps   = 6               // individuals split 50/50 for the (reported) concordance signal; never published. Only used when compute_concordance=true.
 params.r80_threshold   = 0.8             // STACKS r80: locus genotyped in >= this fraction of SNP-subset samples
 
 // r80-elbow selector: the elbow is where marginal r80 gain per added contig drops

@@ -1,23 +1,19 @@
 // workflows/optimize_denovo.nf
 // ============================================================================
-// De novo cutoff/similarity OPTIMIZATION subworkflow (replaces the map-back sweep)
+// De novo cutoff/similarity OPTIMIZATION subworkflow
 // ============================================================================
-// SKELETON / CHUNK 2: channel topology with STUB processes (echo placeholders).
-// This exists to validate the three-branch wiring on a cheap -resume run BEFORE
-// any expensive process internals are written. Real signal processes are filled
-// in chunks 3-6.
-//
-// Three branches off the repaired reads (passed in as cleaned_reads):
-//   1. PRODUCTION  — intact individuals; handled in main.nf, NOT here.
-//   2. ASSEMBLY    — intact subset -> per-sample uniq.seqs -> candidate references.
-//   3. CONCORDANCE — N highest-depth individuals split 50/50 (pseudo-reps),
-//                    used ONLY for the stage-2 concordance signal. Never published.
-//
-// The assembly subset and concordance individuals MAY OVERLAP (default).
+// Builds a grid of candidate de novo references (Cartesian product of the assembly
+// axes), computes per-candidate signals, and selects the winner by the r80-vs-
+// n_contigs diminishing-returns knee (see rank_and_select.R). Two branches off the
+// repaired reads (passed in as cleaned_reads):
+//   1. ASSEMBLY    — ALL samples -> per-sample uniq.seqs -> candidate references.
+//   2. SNP SIGNALS — a seeded snp_sample_pct subset mapped to each candidate for the
+//                    r80 + SNP-density signals. (An optional pseudo-rep concordance
+//                    signal exists but is default OFF; see compute_concordance.)
 //
 // Emits (contract that denovo_assembly.nf -> main.nf depends on):
 //   reference, assembly_stats   (always)
-//   plus diagnostics/optimization artifacts for the report (chunk 7).
+//   plus diagnostics/optimization artifacts for the report.
 
 nextflow.enable.dsl = 2
 
@@ -33,30 +29,15 @@ include { rank_and_select }              from '../modules/rank_and_select.nf'
 include { write_anchor_calc }            from '../modules/write_anchor_calc.nf'
 
 // ---------------------------------------------------------------------------
-// STUB PROCESSES — echo placeholders. Replaced in later chunks.
-// Each prints what it WOULD do and emits correctly-typed placeholder files so
-// the channel graph is exercised end to end.
+// FINALIZE: select the winning candidate as the production reference and publish
+// it. Candidates are already full-sample assemblies, so this does NOT re-assemble —
+// it stages the winner's existing denovo_reference.fa under the canonical name and
+// publishes it. This is the SINGLE publish point for the production reference.
 // ---------------------------------------------------------------------------
-
-// (chunk 3a) stub_build_candidate REMOVED — real candidates now come from
-// filter_unique_seqs_candidate + assemble_rainbow_candidate.
-
-// (chunk 3b) stub_cheap_signals and stub_provisional_rank REMOVED — real signals
-// now come from compute_cheap_signals.nf + fit_nb_mixture.nf + rank_and_select.nf.
-// (chunk 5b) stub_stage2 + stub_aggregate REMOVED — 1-pass design: compute_snp_signals
-// runs on ALL candidates, rank_and_select does the single weight-free aggregation.
-
-// Stand-in for: SELECT the winning candidate as the production reference and
-// publish it. Real version (chunk 6) — under Position B, candidates are already
-// full-sample assemblies, so finalize does NOT re-assemble. It picks the winner's
-// existing denovo_reference.fa by meta.id and publishes it to a clean, stable
-// location (the single publishDir for the production reference; candidate
-// publishDirs will be removed once finalize owns publishing).
-process stub_finalize_reference {
+process finalize_reference {
     label 'basic'
     tag "finalize:${meta.id}"
 
-    // Position B: this is the SINGLE publish point for the production reference.
     publishDir "${params.outdir}/denovo_assembly", mode: params.publish_dir_mode
 
     input:
@@ -258,24 +239,33 @@ workflow optimize_denovo {
         expected_loci_ch = write_anchor_calc.out.expected_loci.map { f -> f.text.trim() }
 
         // ----- PSEUDO-REPLICATES: N highest-depth individuals, split 50/50 -----
-        // Used ONLY for the concordance signal (PASS A in compute_snp_signals).
-        // STUB selection: first-N by SORTED sample id (depth-based selection is a
-        // later refinement). Sort-before-take for cache stability.
-        n_reps = params.n_pseudo_reps ?: 6
-        concordance_indivs = cleaned_reads
-            .toList()
-            .flatMap { rows -> new ArrayList(rows).sort { a, b -> a[0] <=> b[0] }.take( n_reps as int ) }
-        split_pseudo_rep( concordance_indivs, params.optimize_seed ?: 42 )
+        // Used ONLY for the concordance signal (PASS A in compute_snp_signals), which
+        // is DEFAULT OFF (reported-only, ~constant across the grid, and expensive: it
+        // maps n_pseudo_reps*2 half-libraries to every candidate). When off we skip the
+        // split entirely and hand compute_snp_signals an EMPTY bag — its PASS A loop
+        // finds no *_a.r1.fq.gz files and emits concordance=NA.
+        if (params.compute_concordance) {
+            // STUB selection: first-N by SORTED sample id (depth-based selection is a
+            // later refinement). Sort-before-take for cache stability.
+            n_reps = params.n_pseudo_reps ?: 6
+            concordance_indivs = cleaned_reads
+                .toList()
+                .flatMap { rows -> new ArrayList(rows).sort { a, b -> a[0] <=> b[0] }.take( n_reps as int ) }
+            split_pseudo_rep( concordance_indivs, params.optimize_seed ?: 42 )
 
-        // Flatten pseudo-rep halves into a collected bag of fastqs (every candidate
-        // gets the same bag). Each emission: (parent, a_id, a_r1, a_r2, b_id, b_r1, b_r2)
-        pseudo_fastqs = split_pseudo_rep.out.pseudo_reps
-            .flatMap{ parent, aid, ar1, ar2, bid, br1, br2 -> [ar1, ar2, br1, br2] }
-            .collect()
+            // Flatten pseudo-rep halves into a collected bag of fastqs (every candidate
+            // gets the same bag). Each emission: (parent, a_id, a_r1, a_r2, b_id, b_r1, b_r2)
+            pseudo_fastqs = split_pseudo_rep.out.pseudo_reps
+                .flatMap{ parent, aid, ar1, ar2, bid, br1, br2 -> [ar1, ar2, br1, br2] }
+                .collect()
+        } else {
+            log.info "Pseudo-rep concordance (PASS A) DISABLED (compute_concordance=false) — skipping pseudo-rep split + per-candidate half-library mapping; concordance will be reported as NA. Set --compute_concordance true to enable the diagnostic."
+            pseudo_fastqs = Channel.value([])   // empty bag -> PASS A finds no files -> concordance NA
+        }
 
         // ----- SNP-subset: seeded snp_sample_pct of samples for r80 + density -----
         // sorted-before-take for cache stability; overlap with pseudo-reps is fine.
-        // Default 75% — r80 stability scales with sample count (the 80%-shared set
+        // Default 20% (params.snp_sample_pct) — r80 stability scales with sample count (the 80%-shared set
         // is better estimated with more samples).
         def snp_pct = (params.snp_sample_pct ?: 75) as int
         snp_subset_reads = cleaned_reads
@@ -299,13 +289,14 @@ workflow optimize_denovo {
         compute_snp_signals( snp_in, (params.r80_threshold ?: 0.8) )
         snp_rows = compute_snp_signals.out.snp_row.collect()
 
-        // ----- SELECT via r80-vs-n_contigs ELBOW -----
-        // PRIMARY selection = elbow of the r80(n_contigs) curve: the smallest
-        // assembly past which marginal r80 gain per added contig falls below
-        // r80_elbow_min_slope (diminishing returns -> only junk/paralogs added).
-        // This is parameter-agnostic (works for any swept axes). concordance/anchor/
-        // NB are REPORTED for context but do NOT drive selection (concordance is
-        // size-monotone; the elbow on r80 is the real, size-aware optimum).
+        // ----- SELECT via the r80-vs-n_contigs DIMINISHING-RETURNS KNEE -----
+        // PRIMARY selection (rank_and_select.R): fit a monotone-saturating curve to
+        // the r80(n_contigs) envelope and take the leveling-off point — the smallest
+        // assembly past which the FITTED marginal r80 gain per added contig drops
+        // below r80_knee_frac of its initial slope (diminishing returns -> only
+        // junk/paralogs added beyond). Parameter-agnostic (works for any swept axes).
+        // concordance/anchor/NB/snps_per_locus are REPORTED for context but do NOT
+        // drive selection (the knee on r80 is the real, size-aware optimum).
         rank_and_select(
             cheap_rows,
             snp_rows,
@@ -323,11 +314,11 @@ workflow optimize_denovo {
             .filter { id, meta, fa, best -> id == best.toString() }
             .map { id, meta, fa, best -> tuple(meta, fa) }
 
-        stub_finalize_reference( winning_candidate )
+        finalize_reference( winning_candidate )
 
     emit:
-        reference      = stub_finalize_reference.out.reference
-        assembly_stats = stub_finalize_reference.out.stats
+        reference      = finalize_reference.out.reference
+        assembly_stats = finalize_reference.out.stats
         // Optimization/diagnostics artifacts (consumed by report in chunk 7):
         cutoff1_plot   = assembly_diagnostics.out.cutoff1_plot
         cutoff2_plot   = assembly_diagnostics.out.cutoff2_plot

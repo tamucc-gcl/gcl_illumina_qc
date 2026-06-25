@@ -1,15 +1,16 @@
-// modules/compute_cheap_signals.nf  (chunk 3c — redundancy removed)
-// Per-candidate CONTIG STATS used by the provisional rank step:
-//   - n_contigs, total_len, mean_len  ->  inflection (1a), REPORT-ONLY (excluded
-//        from the aggregate rank because it duplicates NB on the c1 axis), and
-//        n_contigs feeds the optional biological anchor (signal 2).
-// No mapping here. Redundancy (1b) was REMOVED in chunk 3c: self-clustering a
-// reference that is already a CD-HIT product returns ~0 for every candidate, so
-// it was a dead signal. Assembly QUALITY is now measured by coverage-uniformity
-// (compute_coverage_cv.nf: CV + Gini), which discriminates along c2/similarity.
+// modules/compute_cheap_signals.nf
+// Per-candidate CONTIG COUNT for the selection curve. Emits n_contigs only:
+//   - n_contigs is the x-axis of the r80-vs-n_contigs curve (rank_and_select.R),
+//     i.e. the "assembly size" against which the diminishing-returns knee is found.
+//   - n_contigs also feeds the optional biological anchor (expected-loci proximity).
+// No mapping here; this is the cheap (grep-only) per-candidate signal.
+//
+// Full per-candidate contig-length stats (total bases, N50, mean, size distribution)
+// already live in assemble_rainbow_candidate's assembly_stats.txt, so they are NOT
+// duplicated here.
 //
 // Emits ONE tsv row per candidate:
-//   id  c1  c2  sim  n_contigs  total_len  mean_len
+//   id  c1  c2  isim  divf  mr  fsim  n_contigs
 
 process compute_cheap_signals {
     label 'basic'
@@ -25,12 +26,11 @@ process compute_cheap_signals {
     """
     set -euo pipefail
     N_CONTIGS=\$(grep -c '^>' ${reference} || echo 0)
-    read TOTAL_LEN MEAN_LEN <<< \$(awk '/^>/{next} {l+=length(\$0); n++} END{ if(n>0) printf "%d %d", l, l/n; else printf "0 0" }' ${reference})
 
-    printf "%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" \\
+    printf "%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" \\
         "${meta.id}" "${meta.c1}" "${meta.c2}" "${meta.isim}" "${meta.divf}" "${meta.mr}" "${meta.fsim}" \\
-        "\$N_CONTIGS" "\$TOTAL_LEN" "\$MEAN_LEN" > cheap_${meta.id}.tsv
+        "\$N_CONTIGS" > cheap_${meta.id}.tsv
 
-    echo "[cheap_signals ${meta.id}] contigs=\$N_CONTIGS total=\$TOTAL_LEN mean=\$MEAN_LEN"
+    echo "[cheap_signals ${meta.id}] contigs=\$N_CONTIGS"
     """
 }

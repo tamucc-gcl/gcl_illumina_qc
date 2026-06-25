@@ -9,7 +9,7 @@ process rank_and_select {
     publishDir "${params.outdir}/denovo_assembly/optimize", mode: params.publish_dir_mode, pattern: "{final_rank.tsv,optimize_plot.png,optimize_params_plot.png}"
 
     input:
-        path(cheap_rows)        // many cheap_<id>.tsv (id c1 c2 sim n_contigs total_len mean_len)
+        path(cheap_rows)        // many cheap_<id>.tsv (id c1 c2 isim divf mr fsim n_contigs)
         path(snp_rows)          // many snp_<id>.tsv   (id c1 c2 sim concordance r80_loci snps_per_locus n_snps n_called_contigs)
         path(nb_cutoff1)        // nb_cutoff1.value (reported)
         val(expected_loci)      // integer or "NA" (reported as anchor)
