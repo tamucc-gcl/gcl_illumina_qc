@@ -314,7 +314,7 @@ workflow {
         .set { individual_reads }
     
     // Create a value channel for the config file (broadcast to all processes)
-    config_ch = Channel.value(file(params.decontam_conffile))
+    config_ch = Channel.fromPath(params.decontam_conffile)
     
     fastq_screen( individual_reads, config_ch )
 
